@@ -2,7 +2,7 @@
 
 Kingpay is a fictional superhero protection booking and wallet API. The planned flow creates a booking, collects both participants' completion confirmations, and lets the customer explicitly pay its fixed price. Wallets start at zero and can receive simulated loads. Standalone transfers have a separate permanent ledger.
 
-**Current state: Phase 2 implemented.** Registration creates a hashed user and zero-balance wallet atomically. Login issues signed JWTs; other routes require an active authenticated user, with ownership guards on identifier-based transfers and bookings. Future business operations still return 501 after authorization. See the [Phase 2 report](docs/phase-2-report.md) and [endpoint inventory](docs/skeleton-status.md).
+**Current state: Phase 3 implemented.** Registration/login, own profile read/update/deactivation, active superhero selection, zero-wallet creation and simulated owner-only loading work. Transfers, booking commands and payment remain future-phase operations with 501 placeholders after authorization. See the [Phase 3 report](docs/phase-3-report.md) and [endpoint inventory](docs/skeleton-status.md).
 
 ## Prerequisites and dependency installation
 
@@ -65,9 +65,9 @@ The script compiles with cached Maven dependencies and checks the entity, DTO, e
 mvn test
 ```
 
-The latest full-suite result is recorded in the [Phase 2 report](docs/phase-2-report.md), including real MySQL repository, registration rollback/concurrency, HTTP security and application-context tests. See also [MySQL setup evidence](docs/mysql-setup.md).
+The full suite passes **263 tests** with zero failures/errors/skips. The [Phase 3 report](docs/phase-3-report.md) records unit, HTTP/security, MySQL repository and committed concurrency evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
 
-Registration and Phase 2 methods have [documented executable cases](docs/test-cases/phase-2.md), with at least three distinct cases per affected service/controller method. Future business methods still need their own cases; no coverage report is claimed.
+Registration, [Phase 2](docs/test-cases/phase-2.md) and [Phase 3](docs/test-cases/phase-3.md) have documented executable cases, with at least three per affected service/controller method. Future business methods still need their own cases; no coverage report is claimed.
 
 The isolated account entity suite can run before datasource setup:
 
@@ -103,7 +103,7 @@ The startup command is:
 mvn spring-boot:run
 ```
 
-MySQL connectivity, schema validation, executable application startup, and an HTTP request were verified against `kingpay`. The temporary verification server was stopped afterward. Normal starts use `DB_DDL_AUTO=validate`; the four mapped tables already exist. Demo data and funding setup remain pending.
+MySQL connectivity, schema validation and executable startup were verified against `kingpay`. Normal starts use `DB_DDL_AUTO=validate`; the four mapped tables already exist. Phase 3 introduces no schema migration.
 
 ## Minimal API example
 
@@ -124,7 +124,7 @@ $authHeaders = @{ Authorization = 'Bearer ' + $loginResponse.data.token }
 Invoke-WebRequest http://localhost:8080/api/v1/accounts/me -Headers $authHeaders
 ```
 
-Registration returns 201, login returns 200, and the authenticated account lookup currently returns **501** because its Phase 3 business operation is unfinished. PowerShell reports that 501 as an HTTP error. Omitting the bearer returns 401. A typical authentication failure is:
+Registration returns 201, login returns 200, and the authenticated account lookup returns 200 with its zero balance. Omitting the bearer returns 401. A typical authentication failure is:
 
 ```json
 {"message":"Authentication required or invalid.","data":null}
@@ -132,4 +132,29 @@ Registration returns 201, login returns 200, and the authenticated account looku
 
 The authenticated principal supplies caller identity. Tokens use a stable user ID, validated issuer/expiry and HS256 signature; every bearer request reloads current user name, active state and roles. Inactive users cannot log in or use existing tokens. There is no refresh-token or logout endpoint. Wrong credentials receive a generic 401; cross-owner actions receive 403; validation errors use the same `message`/`data` envelope with safe field descriptions.
 
-Wallet loading remains a Phase 3 stub at `POST /api/v1/accounts/me/load` with `{"amount":1000.00}`. It is simulated funding without a real payment provider. Other future operations and policy questions are listed in the phase report.
+Load the authenticated owner's wallet with an exact positive amount:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/api/v1/accounts/me/load -Method Post `
+  -Headers $authHeaders -ContentType 'application/json' -Body '{"amount":1000.00}'
+```
+
+Each successful request adds that amount; retrying a successful request adds it again. This is simulated project funding with no external payment provider or transfer-ledger row. Amounts must fit 17 integer and 2 fractional digits; resulting balances must also fit. No rounding or currency conversion occurs; one implicit project currency is used.
+
+Profile routes are `GET/PUT/DELETE /api/v1/users/me`. PUT fully replaces username, fullName, phone, email and isSuperhero; server-owned fields cannot be changed through that body. Unknown JSON fields are ignored. DELETE freezes the user only when the wallet is zero and no outstanding booking exists in either role; it retains wallet, booking and ledger records. State conflicts return 409. Inactive users' tokens are rejected with 401.
+
+`GET /api/v1/users/superheroes` returns active eligible users with wallets, including their `accountId` for the future booking request. Contact details and balances are omitted. Removing provider eligibility while assigned work is unfinished/unpaid returns 409.
+
+Registration already creates a wallet. `POST /api/v1/accounts` creates a zero wallet for an accountless user and returns 409 for an existing wallet; it accepts no opening-balance input.
+
+## Prepare repeatable demo participants
+
+With the application running, execute:
+
+```powershell
+.\scripts\prepare-demo.ps1
+```
+
+The script prepares `demo-customer` at **1000.00** and `demo-superhero` at **250.00**, using real API calls. Missing credentials are generated into ignored `kingpay/.env.demo`; the script prints only usernames, wallet IDs and balances. You can supply `KINGPAY_DEMO_PASSWORD` instead. Read your local secret file privately when preparing Postman; keep passwords/tokens out of screenshots and source control.
+
+Sequential reruns load only the difference to the target. A balance above target, an inactive identity, incompatible eligibility or an existing different password fails without resetting the account. Run the script sequentially. It targets localhost by default; `-BaseUrl` selects a different local server port.

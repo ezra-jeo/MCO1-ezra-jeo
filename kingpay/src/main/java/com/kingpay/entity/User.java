@@ -1,6 +1,6 @@
 package com.kingpay.entity;
 
-import com.kingpay.exception.UnimplementedOperationException;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -54,8 +54,8 @@ public class User {
     /**
      * Assigns the initial data shape without applying business validation.
      *
-     * <p>Preconditions: The future service validates all supplied data before persistence.
-     * <p>Postconditions: Initial fields are assigned; ownership and financial rules are not implemented.
+     * <p>Preconditions: The service validates all supplied data before persistence.
+     * <p>Postconditions: Initial fields are assigned; this constructor does not enforce ownership or financial rules.
      * @param username initial username
      * @param passwordHash initial passwordHash
      * @param fullName initial fullName
@@ -163,7 +163,7 @@ public class User {
     /**
      * Assigns username.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: username holds the supplied value.
      * @param username replacement username
      */
@@ -174,7 +174,7 @@ public class User {
     /**
      * Assigns passwordHash.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: passwordHash holds the supplied value.
      * @param passwordHash replacement passwordHash
      */
@@ -185,7 +185,7 @@ public class User {
     /**
      * Assigns fullName.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: fullName holds the supplied value.
      * @param fullName replacement fullName
      */
@@ -196,7 +196,7 @@ public class User {
     /**
      * Assigns phone.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: phone holds the supplied value.
      * @param phone replacement phone
      */
@@ -207,7 +207,7 @@ public class User {
     /**
      * Assigns email.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: email holds the supplied value.
      * @param email replacement email
      */
@@ -218,7 +218,7 @@ public class User {
     /**
      * Assigns isSuperhero.
      *
-     * <p>Preconditions: The future service validates and authorizes the change.
+     * <p>Preconditions: The service validates and authorizes the change.
      * <p>Postconditions: isSuperhero holds the supplied value.
      * @param isSuperhero replacement isSuperhero
      */
@@ -227,11 +227,10 @@ public class User {
     }
 
     /**
-     * Reserves the user deactivation operation.
+     * Freezes this identity while retaining all related records.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: The service has checked zero balance and no outstanding work.
+     * <p>Postconditions: active is false; other fields and referenced records are unchanged.
      */
     public void deactivate() {
         this.active = false;

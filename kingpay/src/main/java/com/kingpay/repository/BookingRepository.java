@@ -10,6 +10,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
+    /** Preconditions: account ID and excluded status are persisted values. Postconditions: no writes.
+     * @param serviceProviderId provider account ID
+     * @param status completed state excluded from outstanding work
+     * @return whether the provider has unfinished or unpaid work */
+    boolean existsByServiceProvider_IdAndStatusNot(Long serviceProviderId, BookingStatus status);
+
     /**
      * Lists bookings where a user participates as customer or service provider.
      * <p>Preconditions: pass the authenticated username as both parameters.

@@ -81,13 +81,14 @@ try {
     foreach ($name in @('UserResponse', 'SuperheroResponse', 'AccountResponse', 'BookingResponse', 'TransferResponse', 'AuthResponse', 'ApiResponse')) {
         $response = Read-Source "dto/response/$name.java"
         Assert-Contract ($response -notmatch '(?i)\b(password|passwordHash)\b') "$name must not expose credentials."
-        Assert-Contract ($response -notmatch '\b(User|Account|Booking|TransferRecord)\s+\w+[,)]') "$name must not embed persistence entities."
+        $responseDeclaration = $response -replace '(?s)/\*.*?\*/', ''
+        Assert-Contract ($responseDeclaration -notmatch '\b(User|Account|Booking|TransferRecord)\s+\w+[,)]') "$name must not embed persistence entities."
     }
     $authResponse = Read-Source 'dto/response/AuthResponse.java'
     Assert-Contract ($authResponse -match '\[redacted\]') 'AuthResponse must redact its token in string representations.'
 
     $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 6 }
-    $expectedPlaceholderCounts = @{ Auth = 0; User = 4; Account = 3; Transfer = 2; Booking = 6 }
+    $expectedPlaceholderCounts = @{ Auth = 0; User = 0; Account = 0; Transfer = 2; Booking = 6 }
     $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings' }
     foreach ($name in $expectedMethodCounts.Keys) {
         $service = Read-Source "service/${name}Service.java"

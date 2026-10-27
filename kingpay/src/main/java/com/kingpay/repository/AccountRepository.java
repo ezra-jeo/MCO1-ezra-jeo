@@ -2,12 +2,19 @@ package com.kingpay.repository;
 
 import com.kingpay.entity.Account;
 import java.util.Optional;
+import java.util.List;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 /** Account persistence; identifier lookup and CRUD are inherited from JpaRepository. */
 @Repository
 public interface AccountRepository extends JpaRepository<Account, Long> {
+
+    /** Preconditions: caller authorization belongs to service. Postconditions: one joined query, no writes.
+     * @return active eligible provider wallets ordered by username, with initialized user details */
+    @EntityGraph(attributePaths = "user")
+    List<Account> findByUser_IsSuperheroTrueAndUser_ActiveTrueOrderByUser_UsernameAsc();
 
     /**
      * Resolves an account through its owner's login name.

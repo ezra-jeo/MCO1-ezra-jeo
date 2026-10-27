@@ -87,7 +87,7 @@ class PhaseTwoSecurityTest {
         String token = read(response.getResponse().getContentAsString(), "$.data.token");
         assertThat(decoder.decode(token).getSubject()).isEqualTo(customer.getId().toString());
         mvc.perform(get("/api/v1/accounts/me").header("Authorization", "Bearer " + token))
-                .andExpect(status().isNotImplemented()).andExpect(header().doesNotExist("Set-Cookie"));
+                .andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"));
         assertThat(response.getRequest().getSession(false)).isNull();
     }
 

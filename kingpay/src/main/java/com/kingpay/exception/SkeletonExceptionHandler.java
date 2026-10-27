@@ -20,6 +20,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class SkeletonExceptionHandler {
 
+    /** Preconditions: a valid request conflicts with current state. Postconditions: safe HTTP 409.
+     * @param exception public-safe state conflict
+     * @return conflict envelope */
+    @ExceptionHandler(BusinessConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusinessConflict(BusinessConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiResponse<>(exception.getMessage(), null));
+    }
+
     /**
      * Normalizes remaining failures without exposing framework, SQL, or credential diagnostics.
      * <p>Preconditions: no more specific handler matched the exception.

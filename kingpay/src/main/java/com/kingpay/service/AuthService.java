@@ -120,18 +120,7 @@ public class AuthService {
      * @return whether the username unique constraint caused the failure
      */
     private boolean isUsernameConflict(DataIntegrityViolationException exception) {
-        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation) {
-                String constraint = violation.getConstraintName();
-                if (constraint == null) {
-                    return false;
-                }
-                String unquoted = constraint.replace("`", "").replace("\"", "");
-                String name = unquoted.substring(unquoted.lastIndexOf('.') + 1);
-                return User.USERNAME_UNIQUE_CONSTRAINT.equalsIgnoreCase(name);
-            }
-        }
-        return false;
+        return com.kingpay.exception.UsernameConflicts.matches(exception);
     }
 
     /**

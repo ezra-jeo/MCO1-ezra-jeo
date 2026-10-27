@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Draft HTTP routes; service stubs deliberately report HTTP 501. */
+/** Authenticated Phase 3 routes; persistence and domain checks belong to the service. */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
@@ -39,9 +39,9 @@ public class UserController {
      * Routes own profile lookup to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the owner's profile
      */
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getMe(Principal caller) {
@@ -54,10 +54,10 @@ public class UserController {
      * Routes own profile update to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param request validated request body
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the updated owner's profile
      */
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> updateMe(@Valid @RequestBody UpdateUserRequest request, Principal caller) {
@@ -70,9 +70,9 @@ public class UserController {
      * Routes user deactivation to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 204 with no body after guarded deactivation
      */
     @DeleteMapping("/me")
     public ResponseEntity<Void> deactivateMe(Principal caller) {
@@ -84,9 +84,9 @@ public class UserController {
      * Routes superhero browsing to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with sorted bookable superhero summaries
      */
     @GetMapping("/superheroes")
     public ResponseEntity<ApiResponse<List<SuperheroResponse>>> getSuperheroes(Principal caller) {

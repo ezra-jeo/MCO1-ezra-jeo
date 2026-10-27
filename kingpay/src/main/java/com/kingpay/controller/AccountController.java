@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Draft HTTP routes; service stubs deliberately report HTTP 501. */
+/** Authenticated Phase 3 routes; persistence and domain checks belong to the service. */
 @RestController
 @RequestMapping("/api/v1/accounts")
 public class AccountController {
@@ -36,9 +36,9 @@ public class AccountController {
      * Routes zero-balance account creation to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 201 with the newly created zero-balance owner wallet
      */
     @PostMapping
     public ResponseEntity<ApiResponse<AccountResponse>> create(Principal caller) {
@@ -50,12 +50,12 @@ public class AccountController {
     /**
      * Routes simulated wallet loading to the Phase 3 service.
      *
-     * <p>Preconditions: request syntax is valid; the future service enforces
+     * <p>Preconditions: request syntax is valid; the service enforces
      * authenticated ownership, active status, and the account's balance limits.
-     * <p>Postconditions: the skeleton service throws without changing state.
+     * <p>Postconditions: the exact validated amount is added to the caller's wallet.
      * @param request validated positive amount with at most two decimal places
-     * @param caller framework-supplied principal; may be absent until Phase 2
-     * @return the planned updated account; currently HTTP 501 via the exception handler
+     * @param caller framework-supplied authenticated principal
+     * @return HTTP 200 with the updated owner wallet
      */
     @PostMapping("/me/load")
     public ResponseEntity<ApiResponse<AccountResponse>> load(@Valid @RequestBody LoadAccountRequest request, Principal caller) {
@@ -68,9 +68,9 @@ public class AccountController {
      * Routes own account lookup to the Phase 3 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service returns the owned DTO or applies the documented authorized change.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the owner's current wallet
      */
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<AccountResponse>> getMe(Principal caller) {
