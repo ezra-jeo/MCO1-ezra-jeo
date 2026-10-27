@@ -1,6 +1,6 @@
 package com.kingpay.entity;
 
-import com.kingpay.exception.UnimplementedOperationException;
+import com.kingpay.exception.InsufficientBalanceException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -84,26 +84,49 @@ public class Account {
     }
 
     /**
-     * Reserves the account debit operation.
+     * Subtracts a positive amount when sufficient funds are available.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param amount requested amount
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: the current balance is non-null and nonnegative; amount
+     * is non-null, positive, and no greater than the current balance.
+     * <p>Postconditions: on success, the balance decreases by amount and may be zero.
+     * If the amount is invalid or funds are insufficient, the balance is unchanged.
+     * @param amount positive amount to subtract from the balance
+     * @throws IllegalArgumentException if amount is null, zero, or negative
+     * @throws InsufficientBalanceException if amount exceeds the current balance
      */
     public void debit(BigDecimal amount) {
-        throw new UnimplementedOperationException("Account debit");
+        BigDecimal zero = new BigDecimal("0.0");
+        if (amount == null|| amount.compareTo(zero) <= 0) {
+            throw new IllegalArgumentException("Amount argument invalid.");
+        }
+
+        BigDecimal newBalance = this.balance.subtract(amount);        
+        if (newBalance.compareTo(zero) < 0) {
+            throw new InsufficientBalanceException("Debit");
+        }
+        
+        this.balance = newBalance; 
+        
     }
 
     /**
-     * Reserves the account credit operation.
+     * Adds a positive amount to the balance.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param amount requested amount
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: the current balance is non-null and nonnegative; amount
+     * is non-null and positive.
+     * <p>Postconditions: on success, the balance increases by amount. If the amount
+     * is invalid, the balance is unchanged.
+     * @param amount positive amount to add to the balance
+     * @throws IllegalArgumentException if amount is null, zero, or negative
      */
     public void credit(BigDecimal amount) {
-        throw new UnimplementedOperationException("Account credit");
+        BigDecimal zero = new BigDecimal("0.0");
+        if (amount == null || amount.compareTo(zero) <= 0) {
+            throw new IllegalArgumentException("Amount argument invalid.");
+        }
+
+        BigDecimal newBalance = this.balance.add(amount);
+        
+        this.balance = newBalance;
     }
 }

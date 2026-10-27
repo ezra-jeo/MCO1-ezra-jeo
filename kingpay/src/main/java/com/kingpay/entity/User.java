@@ -7,17 +7,21 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 /** Identity and editable profile; one user may also be a superhero. */
 @Entity
-@Table(name = "users")
+@Table(name = "users", uniqueConstraints = @UniqueConstraint(
+        name = User.USERNAME_UNIQUE_CONSTRAINT, columnNames = "username"))
 public class User {
+
+    public static final String USERNAME_UNIQUE_CONSTRAINT = "uk_users_username";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, length = 50)
     private String username;
 
     @Column(name = "password_hash", nullable = false)
@@ -230,6 +234,6 @@ public class User {
      * @throws UnimplementedOperationException always, until the owning phase is implemented
      */
     public void deactivate() {
-        throw new UnimplementedOperationException("User deactivation");
+        this.active = false;
     }
 }

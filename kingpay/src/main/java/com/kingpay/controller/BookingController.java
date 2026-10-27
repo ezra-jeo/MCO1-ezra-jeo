@@ -37,10 +37,10 @@ public class BookingController {
     /**
      * Routes booking creation to the Phase 5 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param request validated request body
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PostMapping
@@ -53,10 +53,10 @@ public class BookingController {
     /**
      * Routes participant booking lookup to the Phase 5 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param bookingId resource identifier
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @GetMapping("/{bookingId}")
@@ -69,9 +69,9 @@ public class BookingController {
     /**
      * Routes participant booking list to the Phase 5 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @GetMapping
@@ -84,10 +84,10 @@ public class BookingController {
     /**
      * Routes customer completion confirmation to the Phase 5 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param bookingId resource identifier
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PostMapping("/{bookingId}/confirmations/customer")
@@ -100,10 +100,10 @@ public class BookingController {
     /**
      * Routes service provider completion confirmation to the Phase 5 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param bookingId resource identifier
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PostMapping("/{bookingId}/confirmations/service-provider")
@@ -116,10 +116,10 @@ public class BookingController {
     /**
      * Routes booking payment to the Phase 6 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param bookingId resource identifier
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PostMapping("/{bookingId}/payment")

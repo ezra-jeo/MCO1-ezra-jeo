@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Draft HTTP routes; service stubs deliberately report HTTP 501. */
+/** Public registration and login routes; resource access uses bearer authentication. */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -33,12 +33,13 @@ public class AuthController {
     }
 
     /**
-     * Routes user registration to the Phase 2 service.
+     * Registers a user and its initial zero-balance wallet.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Preconditions: request syntax passes Bean Validation.
+     * <p>Postconditions: success returns HTTP 201 without credentials; duplicate
+     * usernames are translated to HTTP 409 by the exception handler.
      * @param request validated request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 201 and the registered user's response fields
      */
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody RegisterRequest request) {
@@ -48,12 +49,12 @@ public class AuthController {
     }
 
     /**
-     * Routes user login to the Phase 2 service.
+     * Authenticates credentials and returns a bearer token.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Preconditions: request syntax is valid.
+     * <p>Postconditions: success returns HTTP 200 and an expiring token; invalid credentials return 401.
      * @param request validated request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 and bearer token metadata
      */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {

@@ -60,7 +60,7 @@ try {
         Assert-Contract ($status -match "\b$state\b") "Missing booking state $state."
     }
 
-    $requestNames = @('RegisterRequest', 'LoginRequest', 'UpdateUserRequest', 'CreateAccountRequest', 'CreateBookingRequest', 'TransferRequest')
+    $requestNames = @('RegisterRequest', 'LoginRequest', 'UpdateUserRequest', 'LoadAccountRequest', 'CreateBookingRequest', 'TransferRequest')
     foreach ($name in $requestNames) {
         $request = Read-Source "dto/request/$name.java"
         Assert-Contract ($request -match "public record $name\(") "Missing request record $name."
@@ -71,8 +71,12 @@ try {
         Assert-Contract ($request -match 'JsonProperty.Access.WRITE_ONLY') "$name password must be write-only."
         Assert-Contract ($request -match '\[redacted\]') "$name must redact its string representation."
     }
-    $createAccount = Read-Source 'dto/request/CreateAccountRequest.java'
-    Assert-Contract ($createAccount -match '@NotNull @DecimalMin\("0.00"\)') 'An opening balance must be supplied and nonnegative.'
+    $loadRequest = Read-Source 'dto/request/LoadAccountRequest.java'
+    Assert-Contract ($loadRequest -match '@NotNull') 'A load amount must be supplied.'
+    Assert-Contract ($loadRequest -match '@DecimalMin\(value = "0.00", inclusive = false\)') 'A load amount must be positive.'
+    Assert-Contract ($loadRequest -match '@Digits\(integer = 17, fraction = 2\)') 'A load amount must fit the money precision.'
+    Assert-Contract ($loadRequest -notmatch '\b(accountId|ownerId|balance|openingBalance)\b') 'Loading must target the caller and accept only an amount.'
+    Assert-Contract (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'dto/request/CreateAccountRequest.java'))) 'Account creation no longer accepts an opening-balance DTO.'
 
     foreach ($name in @('UserResponse', 'SuperheroResponse', 'AccountResponse', 'BookingResponse', 'TransferResponse', 'AuthResponse', 'ApiResponse')) {
         $response = Read-Source "dto/response/$name.java"
@@ -82,14 +86,17 @@ try {
     $authResponse = Read-Source 'dto/response/AuthResponse.java'
     Assert-Contract ($authResponse -match '\[redacted\]') 'AuthResponse must redact its token in string representations.'
 
-    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 2; Transfer = 2; Booking = 6 }
+    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 6 }
+    $expectedPlaceholderCounts = @{ Auth = 0; User = 4; Account = 3; Transfer = 2; Booking = 6 }
     $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings' }
     foreach ($name in $expectedMethodCounts.Keys) {
         $service = Read-Source "service/${name}Service.java"
         $expectedCount = $expectedMethodCounts[$name]
         $throws = [regex]::Matches($service, 'throw new UnimplementedOperationException\(').Count
-        Assert-Contract ($throws -eq $expectedCount) "$name service has a missing explicit placeholder."
-        Assert-Contract ($service -notmatch '\breturn\s+(null|true|false)\s*;') "$name service must not return fake results."
+        Assert-Contract ($throws -eq $expectedPlaceholderCounts[$name]) "$name service has an unexpected placeholder count."
+        if ($name -ne 'Auth') {
+            Assert-Contract ($service -notmatch '\breturn\s+(null|true|false)\s*;') "$name service must not return fake results."
+        }
 
         $controller = Read-Source "controller/${name}Controller.java"
         Assert-Contract ($controller.Contains('@RequestMapping("/api/v1/' + $routeBases[$name] + '")')) "$name controller has an unexpected route base."
@@ -98,13 +105,19 @@ try {
         Assert-Contract ($controller.Contains("private final ${name}Service service;")) "$name controller must use constructor injection."
     }
 
+    $accountService = Read-Source 'service/AccountService.java'
+    Assert-Contract ($accountService -match 'AccountResponse create\(Principal caller\)') 'Account creation must not accept an opening balance.'
+    $accountController = Read-Source 'controller/AccountController.java'
+    Assert-Contract ($accountController -match '@PostMapping\("/me/load"\)') 'Own-wallet loading route is missing.'
+    Assert-Contract ($accountController -match 'load\(@Valid @RequestBody LoadAccountRequest request, Principal caller\)') 'Loading must validate its amount and use the principal.'
+
     $transferController = Read-Source 'controller/TransferController.java'
     Assert-Contract ($transferController -notmatch '@(Put|Patch|Delete)Mapping') 'Transfer history must not expose mutation endpoints.'
     $handler = Read-Source 'exception/SkeletonExceptionHandler.java'
     Assert-Contract ($handler -match 'HttpStatus.NOT_IMPLEMENTED') 'Skeleton operations must report HTTP 501.'
     Assert-Contract ($handler -match '@ExceptionHandler\(UnimplementedOperationException.class\)') 'Only intentional placeholders should map to HTTP 501.'
 
-    Write-Output 'PASS: Java/test sources compile; entity, DTO, route, and placeholder contracts match the skeleton.'
+    Write-Output 'PASS: Java/test sources compile; entity, DTO, route, and remaining placeholder contracts match the current phase.'
     Write-Output 'This is a scaffold check. It does not verify authentication, database startup, business rules, or financial guarantees.'
 }
 finally {

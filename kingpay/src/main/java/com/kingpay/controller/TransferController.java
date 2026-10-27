@@ -37,10 +37,10 @@ public class TransferController {
     /**
      * Routes standalone money transfer to the Phase 4 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param request validated request body
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PostMapping
@@ -53,10 +53,10 @@ public class TransferController {
     /**
      * Routes private transfer history to the Phase 4 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param accountId resource identifier
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @GetMapping("/history/{accountId}")

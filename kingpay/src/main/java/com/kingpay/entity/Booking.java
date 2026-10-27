@@ -1,6 +1,5 @@
 package com.kingpay.entity;
 
-import com.kingpay.exception.UnimplementedOperationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -150,36 +149,78 @@ public class Booking {
     }
 
     /**
-     * Reserves the customer completion confirmation operation.
+     * Records the customer's completion confirmation without moving money.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: status is initialized and the application service has
+     * verified that the caller is this booking's customer.
+     * <p>Postconditions: Unconfirmed becomes CustomerConfirmed;
+     * ServiceProviderConfirmed becomes ConfirmedUnpaid. All other states remain
+     * unchanged, so repeated confirmations cannot reverse completion or payment.
+     * Balances and the payment transfer link are unchanged.
      */
     public void confirmCustomer() {
-        throw new UnimplementedOperationException("Customer completion confirmation");
+        if (this.status == BookingStatus.Unconfirmed) {
+            this.status = BookingStatus.CustomerConfirmed;
+        } else if (this.status == BookingStatus.ServiceProviderConfirmed) {
+            this.status = BookingStatus.ConfirmedUnpaid;
+        }
     }
 
     /**
-     * Reserves the service provider completion confirmation operation.
+     * Records the service provider's completion confirmation without moving money.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: status is initialized and the application service has
+     * verified that the caller is this booking's assigned service provider.
+     * <p>Postconditions: Unconfirmed becomes ServiceProviderConfirmed;
+     * CustomerConfirmed becomes ConfirmedUnpaid. All other states remain
+     * unchanged, so repeated confirmations cannot reverse completion or payment.
+     * Balances and the payment transfer link are unchanged.
      */
     public void confirmServiceProvider() {
-        throw new UnimplementedOperationException("Service provider completion confirmation");
+        if (this.status == BookingStatus.Unconfirmed) {
+            this.status = BookingStatus.ServiceProviderConfirmed;
+        } else if (this.status == BookingStatus.CustomerConfirmed) {
+            this.status = BookingStatus.ConfirmedUnpaid;
+        }
     }
 
     /**
-     * Reserves the booking paid transition operation.
+     * Links a matching transfer and marks a completed unpaid booking as paid.
      *
-     * <p>Preconditions: Arguments satisfy the documented operation contract.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param transfer requested transfer
-     * @throws UnimplementedOperationException always, until the owning phase is implemented
+     * <p>Preconditions: the booking's status, participants, and amount are
+     * initialized; a non-null transfer has initialized accounts and amount.
+     * All participant accounts have non-null persisted IDs.
+     * The application service authorizes the customer and coordinates successful
+     * money movement, ledger persistence, and this update in one transaction.
+     * <p>Postconditions: on success, paymentTransfer references transfer and status
+     * is ConfirmedPaid. Rejected inputs leave both fields unchanged. This method
+     * does not debit or credit accounts or persist the supplied transfer.
+     * <p>Amounts are compared numerically, ignoring scale. Account matching
+     * compares primitive long ID values, independently of object identity.
+     * @param transfer the successful transfer intended to pay this booking
+     * @throws IllegalArgumentException if transfer is null, its accounts or amount
+     * do not match, status is not ConfirmedUnpaid, or a payment is already linked
      */
     public void markPaid(TransferRecord transfer) {
-        throw new UnimplementedOperationException("Booking paid transition");
+        if (transfer == null) {
+            throw new IllegalArgumentException("TransferRecord value is null.");
+        }
+
+        if (transfer.getSourceAccount().getId().longValue() != this.customer.getId().longValue()
+                || transfer.getDestinationAccount().getId().longValue() != this.serviceProvider.getId().longValue()
+                || transfer.getAmount().compareTo(this.amount) != 0) {
+            throw new IllegalArgumentException("TransferRecord is not for the booking.");
+        }
+
+        if (this.status != BookingStatus.ConfirmedUnpaid) {
+            throw new IllegalArgumentException("Both parties have not confirmed protection resolution.");
+        }
+
+        if (this.paymentTransfer != null) {
+            throw new IllegalArgumentException("A transfer has already been recorded");
+        }
+
+        this.paymentTransfer = transfer;
+        this.status = BookingStatus.ConfirmedPaid;
     }
 }

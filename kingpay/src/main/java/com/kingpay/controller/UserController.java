@@ -38,9 +38,9 @@ public class UserController {
     /**
      * Routes own profile lookup to the Phase 3 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @GetMapping("/me")
@@ -53,10 +53,10 @@ public class UserController {
     /**
      * Routes own profile update to the Phase 3 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
      * @param request validated request body
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @PutMapping("/me")
@@ -69,9 +69,9 @@ public class UserController {
     /**
      * Routes user deactivation to the Phase 3 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @DeleteMapping("/me")
@@ -83,9 +83,9 @@ public class UserController {
     /**
      * Routes superhero browsing to the Phase 3 service.
      *
-     * <p>Preconditions: Request syntax is valid; security and business behavior remain unfinished.
+     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
      * <p>Postconditions: The skeleton service throws without changing state.
-     * @param caller framework-supplied authenticated principal; may be absent until Phase 2
+     * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return the planned response when implemented; currently HTTP 501 via the exception handler
      */
     @GetMapping("/superheroes")

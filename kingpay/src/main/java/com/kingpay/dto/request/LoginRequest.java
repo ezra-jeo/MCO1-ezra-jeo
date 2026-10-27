@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
  */
 public record LoginRequest(
         @NotBlank @Size(max = 50) String username,
-        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) @NotBlank @Size(max = 128) String password
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) @NotBlank @Size(max = 72) String password
 ) {
 
     /**

@@ -18,7 +18,7 @@ import jakarta.validation.constraints.Size;
  */
 public record RegisterRequest(
         @NotBlank @Size(min = 3, max = 50) String username,
-        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) @NotBlank @Size(min = 8, max = 128) String password,
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) @NotBlank @Size(min = 8, max = 72) String password,
         @NotBlank @Size(max = 120) String fullName,
         @NotBlank @Size(max = 32) String phone,
         @NotBlank @Email @Size(max = 254) String email,
