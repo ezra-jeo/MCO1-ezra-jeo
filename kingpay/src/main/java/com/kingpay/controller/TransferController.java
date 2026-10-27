@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Draft HTTP routes; service stubs deliberately report HTTP 501. */
+/** Authenticated standalone transfer and owner-only history routes. */
 @RestController
 @RequestMapping("/api/v1/transfers")
 public class TransferController {
@@ -38,10 +38,10 @@ public class TransferController {
      * Routes standalone money transfer to the Phase 4 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service applies the transfer atomically or reads owner-only history; failures use centralized errors.
      * @param request validated request body
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the persisted transfer or private history DTOs
      */
     @PostMapping
     public ResponseEntity<ApiResponse<TransferResponse>> transferMoney(@Valid @RequestBody TransferRequest request, Principal caller) {
@@ -54,10 +54,10 @@ public class TransferController {
      * Routes private transfer history to the Phase 4 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: The service applies the transfer atomically or reads owner-only history; failures use centralized errors.
      * @param accountId resource identifier
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the persisted transfer or private history DTOs
      */
     @GetMapping("/history/{accountId}")
     public ResponseEntity<ApiResponse<List<TransferResponse>>> getTransferHistory(@PathVariable("accountId") Long accountId, Principal caller) {

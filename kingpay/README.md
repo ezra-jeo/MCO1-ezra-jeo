@@ -2,7 +2,7 @@
 
 Kingpay is a fictional superhero protection booking and wallet API. The planned flow creates a booking, collects both participants' completion confirmations, and lets the customer explicitly pay its fixed price. Wallets start at zero and can receive simulated loads. Standalone transfers have a separate permanent ledger.
 
-**Current state: Phase 3 implemented.** Registration/login, own profile read/update/deactivation, active superhero selection, zero-wallet creation and simulated owner-only loading work. Transfers, booking commands and payment remain future-phase operations with 501 placeholders after authorization. See the [Phase 3 report](docs/phase-3-report.md) and [endpoint inventory](docs/skeleton-status.md).
+**Current state: Phase 4 implemented.** Registration/login, profiles, superhero selection, wallet loading, atomic standalone transfers and private transfer history work. Booking creation/confirmations and booking-associated payment remain Phases 5–6. See the [Phase 4 report](docs/phase-4-report.md) and [endpoint inventory](docs/skeleton-status.md).
 
 ## Prerequisites and dependency installation
 
@@ -65,9 +65,9 @@ The script compiles with cached Maven dependencies and checks the entity, DTO, e
 mvn test
 ```
 
-The full suite passes **263 tests** with zero failures/errors/skips. The [Phase 3 report](docs/phase-3-report.md) records unit, HTTP/security, MySQL repository and committed concurrency evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
+The full suite passes **333 tests** with zero failures/errors/skips. The [Phase 4 report](docs/phase-4-report.md) records unit, HTTP/security, actual SQL rollback and committed concurrency evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
 
-Registration, [Phase 2](docs/test-cases/phase-2.md) and [Phase 3](docs/test-cases/phase-3.md) have documented executable cases, with at least three per affected service/controller method. Future business methods still need their own cases; no coverage report is claimed.
+Registration, [Phase 2](docs/test-cases/phase-2.md), [Phase 3](docs/test-cases/phase-3.md) and [Phase 4](docs/test-cases/phase-4.md) have documented executable cases, with at least three per affected service/controller method. Future booking/payment methods still need their own cases; no coverage report is claimed.
 
 The isolated account entity suite can run before datasource setup:
 
@@ -110,14 +110,14 @@ MySQL connectivity, schema validation and executable startup were verified again
 Register a test identity (use a new username if it already exists):
 
 ```powershell
-'{"username":"demo-customer","password":"demo-password-123","fullName":"Demo Customer","phone":"000","email":"demo@example.test","isSuperhero":false}' |
+'{"username":"example-customer","password":"demo-password-123","fullName":"Demo Customer","phone":"000","email":"demo@example.test","isSuperhero":false}' |
   curl.exe -i -X POST http://localhost:8080/api/v1/auth/register -H "Content-Type: application/json" --data-binary '@-'
 ```
 
 Login and use its bearer token with PowerShell:
 
 ```powershell
-$loginBody = @{ username = 'demo-customer'; password = 'demo-password-123' } | ConvertTo-Json
+$loginBody = @{ username = 'example-customer'; password = 'demo-password-123' } | ConvertTo-Json
 $loginResponse = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post `
   -ContentType 'application/json' -Body $loginBody
 $authHeaders = @{ Authorization = 'Bearer ' + $loginResponse.data.token }
@@ -158,3 +158,25 @@ With the application running, execute:
 The script prepares `demo-customer` at **1000.00** and `demo-superhero` at **250.00**, using real API calls. Missing credentials are generated into ignored `kingpay/.env.demo`; the script prints only usernames, wallet IDs and balances. You can supply `KINGPAY_DEMO_PASSWORD` instead. Read your local secret file privately when preparing Postman; keep passwords/tokens out of screenshots and source control.
 
 Sequential reruns load only the difference to the target. A balance above target, an inactive identity, incompatible eligibility or an existing different password fails without resetting the account. Run the script sequentially. It targets localhost by default; `-BaseUrl` selects a different local server port.
+
+## Standalone transfer and private history
+
+After authenticating and loading the example user's wallet above, prepare the demo users so a recipient is available. Use its public provider account ID; the caller supplies no identity credentials in the transfer body:
+
+```powershell
+$sourceWallet = Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders
+$heroList = Invoke-RestMethod http://localhost:8080/api/v1/users/superheroes -Headers $authHeaders
+$recipientAccountId = $heroList.data | Where-Object { $_.username -eq 'demo-superhero' } |
+  Select-Object -First 1 -ExpandProperty accountId
+if (-not $recipientAccountId) { throw 'Run scripts/prepare-demo.ps1 first.' }
+$transferBody = @{ fromId = $sourceWallet.data.id; toId = $recipientAccountId; amount = [decimal]100.00 } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8080/api/v1/transfers -Method Post -Headers $authHeaders `
+  -ContentType 'application/json' -Body $transferBody
+Invoke-RestMethod ('http://localhost:8080/api/v1/transfers/history/' + $sourceWallet.data.id) -Headers $authHeaders
+```
+
+A successful transfer returns 200 with ID, source/destination IDs, exact amount and timestamp. Both balance updates and one ledger insertion commit together. History is private to its account owner and includes incoming/outgoing successful transfers, newest first; no results returns an empty array.
+
+Self-transfers and invalid amounts return 400; missing accounts 404; wrong source/history owner 403; insufficient funds, inactive recipients and capacity conflicts 409. Missing/invalid bearer authentication returns 401. No ledger edit/delete endpoint exists. Repeated successful requests are separate transfers, and standalone transfers do not mark bookings paid.
+
+The example changes the recipient's balance. Demo preparation does not undo transfers or reduce balances above its targets. The acceptance tests use isolated 1000.00/500.00 fixtures and verify 900.00/600.00 after a 100.00 transfer without changing the prepared demo wallets.

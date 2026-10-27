@@ -5,7 +5,7 @@ import java.time.Instant;
 
 /**
  * Response data; persistence entities are not exposed.
- * <p>Preconditions: the future service authorizes access and maps the entity.
+ * <p>Preconditions: the service authorizes access and maps the entity.
  * <p>Postconditions: only the declared response fields are exposed.
  * @param id returned id
  * @param sourceAccountId returned sourceAccountId

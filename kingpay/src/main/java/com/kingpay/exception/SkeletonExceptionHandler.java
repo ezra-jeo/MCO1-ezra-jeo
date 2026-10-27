@@ -157,16 +157,12 @@ public class SkeletonExceptionHandler {
                 .body(new ApiResponse<>(exception.getMessage(), null));
     }
 
-    /**
-     * Reports an unfinished operation without returning a successful placeholder result.
-     * <p>Preconditions: an intentional skeleton operation threw the supplied exception.
-     * <p>Postconditions: HTTP 501 is returned with an explicit message and no payload.
-     * @param exception the unfinished operation
-     * @return HTTP 501 and its message
-     */
+    /** Preconditions: a debit failed for insufficient funds. Postconditions: safe HTTP 409, no diagnostics.
+     * @param exception rejected debit
+     * @return conflict envelope */
     @ExceptionHandler(InsufficientBalanceException.class)
-    public ResponseEntity<ApiResponse<Void>> handleInsufficientBalance(RuntimeException exception) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(exception.getMessage(), null));
+    public ResponseEntity<ApiResponse<Void>> handleInsufficientBalance(InsufficientBalanceException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiResponse<>("Insufficient funds.", null));
     }
 }

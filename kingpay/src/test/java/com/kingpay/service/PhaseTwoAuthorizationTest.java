@@ -10,6 +10,13 @@ import com.kingpay.exception.UnimplementedOperationException;
 import com.kingpay.repository.AccountRepository;
 import com.kingpay.repository.BookingRepository;
 import com.kingpay.security.OwnershipGuard;
+import com.kingpay.security.CurrentUser;
+import com.kingpay.repository.UserRepository;
+import com.kingpay.repository.TransferRecordRepository;
+import com.kingpay.entity.TransferRecord;
+import jakarta.persistence.EntityManager;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.junit.jupiter.api.BeforeEach;
 import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.Optional;
@@ -21,24 +28,47 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.*;
 
-/** P2-A: each protected service operation is exercised before its future business placeholder. */
+/** P2-A regressions: implemented transfer/history authorization and guarded future booking operations. */
 class PhaseTwoAuthorizationTest {
     enum Action { TRANSFER, HISTORY, BOOKING_READ, CUSTOMER_CONFIRM, PROVIDER_CONFIRM, PAY }
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final BookingRepository bookings = mock(BookingRepository.class);
     private final OwnershipGuard guard = new OwnershipGuard(accounts, bookings);
-    private final TransferService transfers = new TransferService(guard);
+    private final UserRepository users = mock(UserRepository.class);
+    private final TransferRecordRepository ledger = mock(TransferRecordRepository.class);
+    private final EntityManager entities = mock(EntityManager.class);
+    private final TransferService transfers = new TransferService(accounts, ledger, new CurrentUser(users, entities), entities);
     private final BookingService service = new BookingService(guard);
 
-    /** Preconditions: real owner/assigned actor calls. Postconditions: passes guard and reaches future-phase placeholder.
+    /** Preconditions: mocks initialized. Postconditions: trusted test principals resolve persisted synthetic IDs. */
+    @BeforeEach
+    void identities() {
+        for (String name : new String[] {"customer", "provider", "outsider"}) {
+            User user = new User(name, "hash", "Test", "0", "test@example.test", name.equals("provider"));
+            ReflectionTestUtils.setField(user, "id", name.equals("customer") ? 1L : name.equals("provider") ? 2L : 3L);
+            when(users.findByUsername(name)).thenReturn(Optional.of(user));
+        }
+        when(ledger.saveAndFlush(any(TransferRecord.class))).thenAnswer(invocation -> {
+            TransferRecord record = invocation.getArgument(0);
+            ReflectionTestUtils.setField(record, "id", 100L);
+            return record;
+        });
+    }
+
+    /** Preconditions: real owner/assigned actor calls. Postconditions: transfer/history succeed or booking guard reaches placeholder.
      * @param action protected operation */
     @ParameterizedTest @EnumSource(Action.class)
     void allowedActorReachesPlaceholder(Action action) {
         seed();
         String actor = action == Action.PROVIDER_CONFIRM ? "provider" : "customer";
-        assertThrows(UnimplementedOperationException.class, () -> invoke(action, 1L, () -> actor));
+        if (action == Action.TRANSFER || action == Action.HISTORY) {
+            assertDoesNotThrow(() -> invoke(action, 1L, () -> actor));
+        } else {
+            assertThrows(UnimplementedOperationException.class, () -> invoke(action, 1L, () -> actor));
+        }
     }
 
     /** Preconditions: third party calls an existing resource. Postconditions: forbidden, without writes.
@@ -77,9 +107,12 @@ class PhaseTwoAuthorizationTest {
 
     /** Preconditions: no fixtures. Postconditions: existing resource stubs have distinct owners. */
     private void seed() {
-        Account customer = new Account(new User("customer", "hash", "Customer", "0", "c@example.test", false), BigDecimal.ZERO);
-        Account provider = new Account(new User("provider", "hash", "Provider", "0", "p@example.test", true), BigDecimal.ZERO);
+        Account customer = new Account(users.findByUsername("customer").orElseThrow(), BigDecimal.TEN);
+        Account provider = new Account(users.findByUsername("provider").orElseThrow(), BigDecimal.ZERO);
+        ReflectionTestUtils.setField(customer, "id", 1L);
+        ReflectionTestUtils.setField(provider, "id", 2L);
         when(accounts.findById(1L)).thenReturn(Optional.of(customer));
+        when(accounts.findById(2L)).thenReturn(Optional.of(provider));
         when(bookings.findById(1L)).thenReturn(Optional.of(new Booking(customer, provider, BigDecimal.ONE)));
     }
 

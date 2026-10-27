@@ -69,7 +69,7 @@ class PhaseTwoSecurityTest {
         customer = users.saveAndFlush(identity("p2c_" + suffix, false));
         provider = users.saveAndFlush(identity("p2p_" + suffix, true));
         outsider = users.saveAndFlush(identity("p2o_" + suffix, false));
-        customerAccount = accounts.saveAndFlush(new Account(customer, BigDecimal.ZERO));
+        customerAccount = accounts.saveAndFlush(new Account(customer, BigDecimal.TEN));
         providerAccount = accounts.saveAndFlush(new Account(provider, BigDecimal.ZERO));
         booking = bookings.saveAndFlush(new Booking(customerAccount, providerAccount, BigDecimal.TEN));
     }
@@ -171,7 +171,7 @@ class PhaseTwoSecurityTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    /** Preconditions: persisted username changes after issuance. Postconditions: stable subject resolves current ownership.
+    /** Preconditions: persisted username changes after issuance. Postconditions: stable subject still permits private history.
      * @throws Exception on HTTP failure */
     @Test
     void usernameChangesDoNotStaleThePrincipal() throws Exception {
@@ -179,15 +179,16 @@ class PhaseTwoSecurityTest {
         customer.setUsername("new_" + UUID.randomUUID().toString().replace("-", ""));
         users.flush();
         mvc.perform(get("/api/v1/transfers/history/" + customerAccount.getId()).header("Authorization", "Bearer " + token))
-                .andExpect(status().isNotImplemented());
+                .andExpect(status().isOk());
     }
 
-    /** Preconditions: assigned actor authenticates. Postconditions: security passes; business operation remains 501.
+    /** Preconditions: assigned actor authenticates. Postconditions: transfer/history return 200; future booking operations return 501.
      * @param action protected method
      * @throws Exception on HTTP failure */
     @ParameterizedTest @EnumSource(Action.class)
     void allowedActorsReachBusinessPlaceholder(Action action) throws Exception {
-        call(action, false, action == Action.PROVIDER_CONFIRM ? provider : customer).andExpect(status().isNotImplemented());
+        call(action, false, action == Action.PROVIDER_CONFIRM ? provider : customer)
+                .andExpect(status().is(action == Action.TRANSFER || action == Action.HISTORY ? 200 : 501));
     }
 
     /** Preconditions: unrelated caller authenticates. Postconditions: 403 without executing future mutation.
