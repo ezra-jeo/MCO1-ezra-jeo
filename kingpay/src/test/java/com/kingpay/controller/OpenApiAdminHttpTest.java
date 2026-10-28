@@ -51,6 +51,8 @@ class OpenApiAdminHttpTest {
     @Autowired private AccountRepository accounts;
     @Autowired private BookingRepository bookings;
     @Autowired private TransferRecordRepository transfers;
+    @Autowired private com.kingpay.repository.HeroRateRepository rates;
+    @Autowired private com.kingpay.repository.ProtectionRequestRepository requests;
     @Autowired private TokenService tokens;
     @Autowired private UserService profiles;
     @Autowired private JdbcTemplate jdbc;
@@ -62,6 +64,8 @@ class OpenApiAdminHttpTest {
     private Long walletId;
     private Long bookingId;
     private Long transferId;
+    private Long rateId;
+    private Long requestId;
 
     /** Preconditions: schema valid. Postconditions: unique admin/ordinary/historical identities and financial rows available. */
     @BeforeEach
@@ -75,7 +79,11 @@ class OpenApiAdminHttpTest {
         walletId = source.getId();
         TransferRecord transfer = transfers.saveAndFlush(new TransferRecord(source, destination, new BigDecimal("100")));
         transferId = transfer.getId();
-        Booking booking = new Booking(source, destination, new BigDecimal("100"));
+        var rate = rates.saveAndFlush(new com.kingpay.entity.HeroRate(destination, new BigDecimal("100")));
+        rateId = rate.getId();
+        var proposal = new com.kingpay.entity.ProtectionRequest(source, rate);
+        proposal.accept(); proposal = requests.saveAndFlush(proposal); requestId = proposal.getId();
+        Booking booking = new Booking(proposal);
         booking.confirmCustomer(); booking.confirmServiceProvider(); booking.markPaid(transfer);
         bookingId = bookings.saveAndFlush(booking).getId();
         historical.deactivate(); users.saveAndFlush(historical);
@@ -112,7 +120,7 @@ class OpenApiAdminHttpTest {
         Map<String, Map<String, Object>> paths = read(document(), "$.paths");
         Set<String> actual = new HashSet<>();
         paths.forEach((path, methods) -> methods.keySet().forEach(method -> actual.add(method + " " + path)));
-        assertThat(actual).hasSize(18).isEqualTo(expected);
+        assertThat(actual).hasSize(24).isEqualTo(expected);
     }
 
     /** Preconditions: generated security metadata. Postconditions: auth public, business routes inherit bearer and admin rule is explicit.
@@ -140,14 +148,14 @@ class OpenApiAdminHttpTest {
     @Test
     void schemasExposeValidationAndSafeDtoFields() throws Exception {
         String json = document();
-        Map<String, Object> booking = read(json, "$.components.schemas.CreateBookingRequest.properties");
-        assertThat(booking.keySet()).containsExactlyInAnyOrder("serviceProviderAccountId", "amount");
-        assertThat((List<String>) read(json, "$.components.schemas.CreateBookingRequest.required")).contains("amount", "serviceProviderAccountId");
+        Map<String, Object> booking = read(json, "$.components.schemas.CreateProtectionRequest.properties");
+        assertThat(booking.keySet()).containsExactlyInAnyOrder("serviceProviderUserId", "expectedAmount");
+        assertThat((List<String>) read(json, "$.components.schemas.CreateProtectionRequest.required")).contains("expectedAmount", "serviceProviderUserId");
         assertThat((Number) read(json, "$.components.schemas.TransferRequest.properties.amount.multipleOf")).isEqualTo(0.01);
         assertThat((Boolean) read(json, "$.components.schemas.TransferRequest.properties.amount.exclusiveMinimum")).isTrue();
         assertThat((Boolean) read(json, "$.components.schemas.RegisterRequest.properties.password.writeOnly")).isTrue();
         Map<String, Object> schemas = read(json, "$.components.schemas");
-        assertThat(schemas).doesNotContainKeys("User", "Account", "Booking", "TransferRecord", "Principal", "JwtSettings", "AdminSettings");
+        assertThat(schemas).doesNotContainKeys("User", "Account", "Booking", "TransferRecord", "HeroRate", "ProtectionRequest", "Principal", "JwtSettings", "AdminSettings");
         Map<String, Object> publicUser = read(json, "$.components.schemas.UserResponse.properties");
         assertThat(publicUser).doesNotContainKeys("passwordHash", "password", "token");
         assertThat((String) read(json, "$.components.schemas.ErrorResponse.properties.message.type")).isEqualTo("string");
@@ -184,6 +192,10 @@ class OpenApiAdminHttpTest {
         assertThat(links.getFirst().longValue()).isEqualTo(transferId);
         List<Number> amounts = read(json, "$.data.transfers[?(@.id == " + transferId + ")].amount");
         assertThat(new BigDecimal(amounts.getFirst().toString())).isEqualByComparingTo("100");
+        List<Number> rateIds = read(json, "$.data.rates[?(@.id == " + rateId + ")].serviceProviderUserId");
+        assertThat(rateIds.getFirst().longValue()).isEqualTo(historical.getId());
+        List<Number> requestLinks = read(json, "$.data.protectionRequests[?(@.id == " + requestId + ")].bookingId");
+        assertThat(requestLinks.getFirst().longValue()).isEqualTo(bookingId);
         assertThat(json).doesNotContain("\"passwordHash\"", "\"password\"", "\"token\"", "private-test-hash");
         assertThat(users.count()).isEqualTo(usersBefore); assertThat(accounts.count()).isEqualTo(accountsBefore);
         assertThat(bookings.count()).isEqualTo(bookingsBefore); assertThat(transfers.count()).isEqualTo(transfersBefore);

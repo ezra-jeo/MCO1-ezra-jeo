@@ -28,7 +28,7 @@ try {
     & mvn -o -DskipTests test-compile
     Assert-Contract ($LASTEXITCODE -eq 0) 'Maven source/test compilation failed.'
 
-    foreach ($entity in @('User', 'Account', 'Booking', 'TransferRecord')) {
+    foreach ($entity in @('User', 'Account', 'Booking', 'TransferRecord', 'HeroRate', 'ProtectionRequest')) {
         $source = Read-Source "entity/$entity.java"
         Assert-Contract ($source -match '@Entity\b') "$entity is missing its JPA mapping."
         Assert-Contract ($source -match 'private Long id;') "$entity must use a Long identifier."
@@ -60,7 +60,7 @@ try {
         Assert-Contract ($status -match "\b$state\b") "Missing booking state $state."
     }
 
-    $requestNames = @('RegisterRequest', 'LoginRequest', 'UpdateUserRequest', 'LoadAccountRequest', 'CreateBookingRequest', 'TransferRequest')
+    $requestNames = @('RegisterRequest', 'LoginRequest', 'UpdateUserRequest', 'LoadAccountRequest', 'PublishRateRequest', 'CreateProtectionRequest', 'TransferRequest')
     foreach ($name in $requestNames) {
         $request = Read-Source "dto/request/$name.java"
         Assert-Contract ($request -match "public record $name\(") "Missing request record $name."
@@ -77,8 +77,11 @@ try {
     Assert-Contract ($loadRequest -match '@Digits\(integer = 17, fraction = 2\)') 'A load amount must fit the money precision.'
     Assert-Contract ($loadRequest -notmatch '\b(accountId|ownerId|balance|openingBalance)\b') 'Loading must target the caller and accept only an amount.'
     Assert-Contract (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'dto/request/CreateAccountRequest.java'))) 'Account creation no longer accepts an opening-balance DTO.'
+    Assert-Contract (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'dto/request/CreateBookingRequest.java'))) 'New bookings must originate in provider acceptance.'
+    $bookingController = Read-Source 'controller/BookingController.java'
+    Assert-Contract ($bookingController -notmatch '@PostMapping\s*(?:\(|\r?\n)\s*(?:\)|public)') 'Direct booking creation must remain retired.'
 
-    foreach ($name in @('UserResponse', 'SuperheroResponse', 'AccountResponse', 'BookingResponse', 'TransferResponse', 'AuthResponse', 'ApiResponse')) {
+    foreach ($name in @('UserResponse', 'SuperheroResponse', 'AccountResponse', 'BookingResponse', 'TransferResponse', 'AuthResponse', 'ApiResponse', 'HeroRateResponse', 'ProtectionRequestResponse', 'AdminOverviewResponse')) {
         $response = Read-Source "dto/response/$name.java"
         Assert-Contract ($response -notmatch '(?i)\b(password|passwordHash)\b') "$name must not expose credentials."
         $responseDeclaration = $response -replace '(?s)/\*.*?\*/', ''
@@ -87,9 +90,9 @@ try {
     $authResponse = Read-Source 'dto/response/AuthResponse.java'
     Assert-Contract ($authResponse -match '\[redacted\]') 'AuthResponse must redact its token in string representations.'
 
-    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 6; Admin = 1 }
-    $expectedPlaceholderCounts = @{ Auth = 0; User = 0; Account = 0; Transfer = 0; Booking = 0; Admin = 0 }
-    $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings'; Admin = 'admin' }
+    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 5; Admin = 1; HeroRate = 2; ProtectionRequest = 5 }
+    $expectedPlaceholderCounts = @{ Auth = 0; User = 0; Account = 0; Transfer = 0; Booking = 0; Admin = 0; HeroRate = 0; ProtectionRequest = 0 }
+    $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings'; Admin = 'admin'; HeroRate = 'users'; ProtectionRequest = 'protection-requests' }
     foreach ($name in $expectedMethodCounts.Keys) {
         $service = Read-Source "service/${name}Service.java"
         $expectedCount = $expectedMethodCounts[$name]

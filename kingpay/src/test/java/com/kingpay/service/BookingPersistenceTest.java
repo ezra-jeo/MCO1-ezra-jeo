@@ -1,6 +1,5 @@
 package com.kingpay.service;
 
-import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.dto.request.UpdateUserRequest;
 import com.kingpay.entity.Account;
 import com.kingpay.entity.Booking;
@@ -53,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 class BookingPersistenceTest {
-    enum Route { CREATE, READ, LIST, CUSTOMER_CONFIRM, PROVIDER_CONFIRM, PAY }
+    enum Route { READ, LIST, CUSTOMER_CONFIRM, PROVIDER_CONFIRM, PAY }
     private static final int WAIT_SECONDS = 30;
     @Autowired private MockMvc mvc;
     @Autowired private BookingService service;
@@ -86,99 +85,6 @@ class BookingPersistenceTest {
             providerAccountId = accounts.saveAndFlush(new Account(provider, new BigDecimal("0.00"))).getId();
             outsiderAccountId = accounts.saveAndFlush(new Account(outsider, new BigDecimal("0.00"))).getId();
         });
-    }
-
-    /** Preconditions: valid quote plus forged server-owned fields. Postconditions: 201 initial fixed-party booking, no money.
-     * @throws Exception on HTTP failure */
-    @Test
-    void creationPersistsServerChosenCustomerAndInitialState() throws Exception {
-        Instant before = Instant.now().minusSeconds(1);
-        String json = body(providerAccountId, "100.00").replace("}", ",\"customerAccountId\":" + outsiderAccountId
-                + ",\"status\":\"ConfirmedPaid\",\"paymentTransferId\":999,\"createdAt\":\"2000-01-01T00:00:00Z\"}");
-        var result = mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(json), customer))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.customerAccountId").value(customerAccountId))
-                .andExpect(jsonPath("$.data.serviceProviderAccountId").value(providerAccountId))
-                .andExpect(jsonPath("$.data.amount").value(100)).andExpect(jsonPath("$.data.status").value("Unconfirmed"))
-                .andExpect(jsonPath("$.data.paymentTransferId").isEmpty()).andExpect(jsonPath("$.data.passwordHash").doesNotExist())
-                .andReturn();
-        Number id = read(result.getResponse().getContentAsString(), "$.data.id");
-        Booking saved = bookings.findById(id.longValue()).orElseThrow();
-        assertThat(saved.getCreatedAt()).isBetween(before, Instant.now().plusSeconds(1));
-        assertFixed(id.longValue(), "100.00");
-        assertThat(bookingCount()).isEqualTo(1);
-        noMoney();
-    }
-
-    /** Preconditions: zero funds, exact positive boundary price. Postconditions: booking succeeds without requiring funding.
-     * @param price minimum or maximum DECIMAL(19,2) quote
-     * @throws Exception on HTTP failure */
-    @ParameterizedTest @ValueSource(strings = {"0.01", "99999999999999999.99"})
-    void zeroFundedCustomerCanBookAnExactPositivePrice(String price) throws Exception {
-        mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(body(providerAccountId, price)), customer))
-                .andExpect(status().isCreated());
-        assertThat(bookingCount()).isEqualTo(1);
-        noMoney();
-    }
-
-    /** Preconditions: invalid request shape. Postconditions: 400 with no booking, balance or ledger changes.
-     * @param shape malformed provider/price/JSON
-     * @throws Exception on HTTP failure */
-    @ParameterizedTest @ValueSource(strings = {"missing-provider", "null-provider", "zero-provider", "negative-provider", "missing-price", "null-price", "zero-price", "negative-price", "fraction", "overflow", "malformed"})
-    void invalidCreationHasNoEffects(String shape) throws Exception {
-        String json = switch (shape) {
-            case "missing-provider" -> "{\"amount\":100}";
-            case "null-provider" -> "{\"serviceProviderAccountId\":null,\"amount\":100}";
-            case "zero-provider" -> body(0L, "100");
-            case "negative-provider" -> body(-1L, "100");
-            case "missing-price" -> "{\"serviceProviderAccountId\":" + providerAccountId + "}";
-            case "null-price" -> body(providerAccountId, "null");
-            case "zero-price" -> body(providerAccountId, "0");
-            case "negative-price" -> body(providerAccountId, "-1");
-            case "fraction" -> body(providerAccountId, "1.001");
-            case "overflow" -> body(providerAccountId, "100000000000000000");
-            default -> "{broken";
-        };
-        mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(json), customer))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").isString());
-        assertThat(bookingCount()).isZero();
-        noMoney();
-    }
-
-    /** Preconditions: accountless customer or absent provider wallet. Postconditions: 404 without creating booking.
-     * @param missingCustomer whether caller lacks a wallet
-     * @throws Exception on HTTP failure */
-    @ParameterizedTest @ValueSource(booleans = {true, false})
-    void missingPartyWalletIsRejected(boolean missingCustomer) throws Exception {
-        mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON)
-                        .content(body(missingCustomer ? providerAccountId : Long.MAX_VALUE, "100")), missingCustomer ? accountless : customer))
-                .andExpect(status().isNotFound());
-        assertThat(bookingCount()).isZero();
-        noMoney();
-    }
-
-    /** Preconditions: customer proposes own wallet. Postconditions: self-booking rejected without insert.
-     * @throws Exception on HTTP failure */
-    @Test
-    void selfBookingIsRejected() throws Exception {
-        mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(body(customerAccountId, "100")), customer))
-                .andExpect(status().isBadRequest());
-        assertThat(bookingCount()).isZero();
-        noMoney();
-    }
-
-    /** Preconditions: proposed provider inactive or ineligible. Postconditions: 409 without booking.
-     * @param inactive which provider rule is violated
-     * @throws Exception on HTTP failure */
-    @ParameterizedTest @ValueSource(booleans = {true, false})
-    void unavailableProviderIsRejected(boolean inactive) throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            User saved = users.findById(provider.getId()).orElseThrow();
-            if (inactive) { saved.deactivate(); } else { saved.setSuperhero(false); }
-        });
-        mvc.perform(auth(post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(body(providerAccountId, "100")), customer))
-                .andExpect(status().isConflict());
-        assertThat(bookingCount()).isZero();
-        noMoney();
     }
 
     /** Preconditions: no bearer. Postconditions: all six routes reject before domain writes.
@@ -395,16 +301,6 @@ class BookingPersistenceTest {
         noMoney();
     }
 
-    /** Preconditions: same valid create submitted twice. Postconditions: two independent jobs; no retry deduplication. */
-    @Test
-    void repeatedCreateRequestsAreIndependentBookings() {
-        long first = createBooking();
-        long second = createBooking();
-        assertThat(first).isNotEqualTo(second);
-        assertThat(bookingCount()).isEqualTo(2);
-        noMoney();
-    }
-
     /** Preconditions: both participants confirm simultaneously. Postconditions: both confirmations persist, no lost update.
      * @throws Exception on worker failure */
     @Test
@@ -430,56 +326,6 @@ class BookingPersistenceTest {
         noMoney();
     }
 
-    /** Preconditions: no bookings; creation races provider eligibility removal. Postconditions: no outstanding ineligible provider.
-     * @throws Exception on worker failure */
-    @Test
-    void creationAndEligibilityRemovalAreSerialized() throws Exception {
-        Callable<String> create = () -> { try { createBooking(); return "booked"; } catch (BusinessConflictException exception) { return "unavailable"; } };
-        Callable<String> remove = () -> {
-            try { profiles.updateMe(new UpdateUserRequest(provider.getUsername(), "Booking Test", "0", "test@example.test", false), () -> provider.getUsername()); return "changed"; }
-            catch (BusinessConflictException exception) { return "outstanding"; }
-        };
-        List<String> results = race(List.of(create, remove));
-        boolean eligible = jdbc.queryForObject("SELECT is_superhero FROM users WHERE id = ?", Boolean.class, provider.getId());
-        if (eligible) { assertThat(results).containsExactlyInAnyOrder("booked", "outstanding"); assertThat(bookingCount()).isEqualTo(1); }
-        else { assertThat(results).containsExactlyInAnyOrder("unavailable", "changed"); assertThat(bookingCount()).isZero(); }
-        noMoney();
-    }
-
-    /** Preconditions: no bookings; zero-wallet participant deactivation competes with booking creation.
-     * Postconditions: either active booked participant or inactive user without booking.
-     * @param providerSide which participant deactivates
-     * @throws Exception on worker failure */
-    @ParameterizedTest @ValueSource(booleans = {true, false})
-    void creationAndParticipantDeactivationAreSerialized(boolean providerSide) throws Exception {
-        User actor = providerSide ? provider : customer;
-        Callable<String> create = () -> {
-            try { createBooking(); return "booked"; }
-            catch (BusinessConflictException | AccessDeniedException exception) { return "unavailable"; }
-        };
-        Callable<String> deactivate = () -> {
-            try { profiles.deactivateMe(() -> actor.getUsername()); return "deactivated"; }
-            catch (BusinessConflictException exception) { return "outstanding"; }
-        };
-        List<String> results = race(List.of(create, deactivate));
-        boolean active = jdbc.queryForObject("SELECT active FROM users WHERE id = ?", Boolean.class, actor.getId());
-        if (active) { assertThat(results).containsExactlyInAnyOrder("booked", "outstanding"); assertThat(bookingCount()).isEqualTo(1); }
-        else { assertThat(results).containsExactlyInAnyOrder("unavailable", "deactivated"); assertThat(bookingCount()).isZero(); }
-        noMoney();
-    }
-
-    /** Preconditions: both identities eligible and create opposite-party jobs concurrently. Postconditions: no deadlock; two jobs.
-     * @throws Exception on worker failure */
-    @Test
-    void oppositePartyCreationsUseOneOwnerLockOrder() throws Exception {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status -> users.findById(customer.getId()).orElseThrow().setSuperhero(true));
-        race(List.of(() -> { createBooking(); return "booked"; }, () -> {
-            service.create(new CreateBookingRequest(customerAccountId, new BigDecimal("50")), () -> provider.getUsername()); return "booked";
-        }));
-        assertThat(bookingCount()).isEqualTo(2);
-        noMoney();
-    }
-
     /** Preconditions: test rows may have committed. Postconditions: only captured booking/ledger/wallet/user fixtures removed. */
     @AfterEach
     void cleanup() {
@@ -494,7 +340,8 @@ class BookingPersistenceTest {
 
     /** Preconditions: active fixtures exist. Postconditions: a real committed booking is created, no money moved.
      * @return generated ID */
-    private long createBooking() { return service.create(new CreateBookingRequest(providerAccountId, new BigDecimal("100")), () -> customer.getUsername()).id(); }
+    private long createBooking() { return new TransactionTemplate(transactionManager).execute(status -> bookings.saveAndFlush(new Booking(
+                accounts.findById(customerAccountId).orElseThrow(), accounts.findById(providerAccountId).orElseThrow(), new BigDecimal("100"))).getId()); }
 
     /** Preconditions: fixture IDs exist. Postconditions: no writes.
      * @param id booking ID
@@ -582,7 +429,6 @@ class BookingPersistenceTest {
      * @return unauthenticated request */
     private MockHttpServletRequestBuilder request(Route route, long id) {
         return switch (route) {
-            case CREATE -> post("/api/v1/bookings").contentType(MediaType.APPLICATION_JSON).content(body(providerAccountId, "100"));
             case READ -> get("/api/v1/bookings/" + id);
             case LIST -> get("/api/v1/bookings");
             case CUSTOMER_CONFIRM -> confirmation(id, true);

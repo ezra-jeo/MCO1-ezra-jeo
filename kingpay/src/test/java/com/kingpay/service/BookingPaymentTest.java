@@ -36,7 +36,7 @@ class BookingPaymentTest {
     private final UserRepository users = mock(UserRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
     private final TransferService transfers = mock(TransferService.class);
-    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities, transfers);
+    private final BookingService service = new BookingService(bookings, new CurrentUser(users, entities), entities, transfers);
     private User customer;
     private User provider;
     private Booking booking;

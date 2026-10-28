@@ -1,6 +1,5 @@
 package com.kingpay.service;
 
-import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.dto.request.TransferRequest;
 import com.kingpay.dto.response.BookingResponse;
 import com.kingpay.dto.response.TransferResponse;
@@ -12,13 +11,10 @@ import com.kingpay.entity.TransferRecord;
 import com.kingpay.exception.BusinessConflictException;
 import com.kingpay.exception.InvalidRequestException;
 import com.kingpay.exception.ResourceNotFoundException;
-import com.kingpay.repository.AccountRepository;
 import com.kingpay.repository.BookingRepository;
 import com.kingpay.security.CurrentUser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import jakarta.validation.Valid;
-import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.Comparator;
 import java.util.List;
@@ -34,52 +30,22 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @Transactional(readOnly = true)
 public class BookingService {
-    private static final BigDecimal MAX_PRICE = new BigDecimal("99999999999999999.99");
-    private static final int MONEY_SCALE = 2;
-    private final AccountRepository accounts;
     private final BookingRepository bookings;
     private final CurrentUser identities;
     private final EntityManager entities;
     private final TransferService transfers;
 
     /** Preconditions: Spring supplies persistence/security. Postconditions: no queries or writes.
-     * @param accounts wallet/party lookup
      * @param bookings booking persistence
      * @param identities active caller resolver
      * @param entities ordered locking context
      * @param transfers transactional wallet/ledger writer */
-    public BookingService(AccountRepository accounts, BookingRepository bookings, CurrentUser identities, EntityManager entities,
+    public BookingService(BookingRepository bookings, CurrentUser identities, EntityManager entities,
             TransferService transfers) {
-        this.accounts = accounts;
         this.bookings = bookings;
         this.identities = identities;
         this.entities = entities;
         this.transfers = transfers;
-    }
-
-    /** Preconditions: active customer wallet, distinct active eligible provider wallet and positive exact price.
-     * Postconditions: one Unconfirmed booking stores fixed parties/price; no balance or ledger changes.
-     * @param request provider wallet ID and agreed DECIMAL(19,2) price
-     * @param caller framework principal defining the customer
-     * @return newly persisted booking
-     * @throws BusinessConflictException if provider eligibility/activity no longer allows booking */
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public BookingResponse create(@Valid CreateBookingRequest request, Principal caller) {
-        BigDecimal price = validatedPrice(request);
-        User actor = identities.active(caller);
-        Account customer = accounts.findByUser_Id(actor.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
-        Account provider = accounts.findById(request.serviceProviderAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Provider account not found."));
-        if (customer.getUser().getId().equals(provider.getUser().getId())) {
-            throw new InvalidRequestException("Customer and provider must differ.");
-        }
-        lockOwners(customer, provider);
-        requireActive(customer.getUser());
-        if (!provider.getUser().isActive() || !provider.getUser().isSuperhero()) {
-            throw new BusinessConflictException("Provider must be active and eligible.");
-        }
-        return response(bookings.saveAndFlush(new Booking(customer, provider, price)));
     }
 
     /** Preconditions: active caller is either participant. Postconditions: private DTO only; no writes.
@@ -202,24 +168,13 @@ public class BookingService {
         if (!actor.isActive()) { throw new AccessDeniedException("Access denied."); }
     }
 
-    /** Preconditions: none. Postconditions: syntax/range errors rejected and exact price returned without writes.
-     * @param request submitted booking data
-     * @return normalized positive price */
-    private BigDecimal validatedPrice(CreateBookingRequest request) {
-        if (request == null || request.serviceProviderAccountId() == null || request.serviceProviderAccountId() <= 0
-                || request.amount() == null || request.amount().signum() <= 0 || request.amount().scale() > MONEY_SCALE
-                || request.amount().compareTo(MAX_PRICE) > 0) {
-            throw new InvalidRequestException("Provider ID and a positive price fitting 17 integer and 2 fractional digits are required.");
-        }
-        return request.amount().setScale(MONEY_SCALE);
-    }
-
     /** Preconditions: authorized persisted booking. Postconditions: only declared IDs/status/price/time exposed.
      * @param booking protected booking
      * @return immutable response; payment link null before payment */
     private BookingResponse response(Booking booking) {
         return new BookingResponse(booking.getId(), booking.getCreatedAt(), booking.getCustomer().getId(),
                 booking.getServiceProvider().getId(), booking.getAmount(), booking.getStatus(),
-                booking.getPaymentTransfer() == null ? null : booking.getPaymentTransfer().getId());
+                booking.getPaymentTransfer() == null ? null : booking.getPaymentTransfer().getId(),
+                booking.getProtectionRequest() == null ? null : booking.getProtectionRequest().getId());
     }
 }

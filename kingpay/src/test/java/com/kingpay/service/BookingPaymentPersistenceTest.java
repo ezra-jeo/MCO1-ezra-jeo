@@ -1,6 +1,5 @@
 package com.kingpay.service;
 
-import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.dto.request.LoadAccountRequest;
 import com.kingpay.dto.request.TransferRequest;
 import com.kingpay.dto.request.UpdateUserRequest;
@@ -363,7 +362,8 @@ class BookingPaymentPersistenceTest {
      * @param price exact quote
      * @return booking ID */
     private long confirmedQuote(String price) {
-        long id = service.create(new CreateBookingRequest(destinationId, new BigDecimal(price)), () -> customer.getUsername()).id();
+        long id = new TransactionTemplate(transactionManager).execute(status -> bookings.saveAndFlush(new Booking(
+                accounts.findById(sourceId).orElseThrow(), accounts.findById(destinationId).orElseThrow(), new BigDecimal(price))).getId());
         service.confirmCustomer(id, () -> customer.getUsername());
         service.confirmServiceProvider(id, () -> provider.getUsername());
         return id;

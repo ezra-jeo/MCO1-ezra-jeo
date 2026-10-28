@@ -119,7 +119,7 @@ public class UserController {
      * @return HTTP 200 with sorted bookable superhero summaries
      */
     @Operation(summary = "List bookable superheroes",
-            description = "Active eligible providers with wallet IDs, without contact details or balances.")
+            description = "Only active eligible providers with wallets and published flat rates. Summaries contain hero user ID, wallet ID, rate ID and amount; select the user ID for protection requests. No contact details or balances.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
                 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
                 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),

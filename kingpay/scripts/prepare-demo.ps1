@@ -50,5 +50,15 @@ foreach ($demo in @(
         $wallet = Invoke-RestMethod -Uri ($BaseUrl + '/api/v1/accounts/me/load') -Method Post -Headers $headers -ContentType 'application/json' -Body $loadBody
     }
     if ([decimal]$wallet.data.balance -ne $demo.Target) { throw 'Demo funding verification failed.' }
+    if ($demo.Hero) {
+        $demoFlatPrice = [decimal]100.00
+        $rate = $null
+        try { $rate = Invoke-RestMethod -Uri ($BaseUrl + '/api/v1/users/' + $demoProfileResponse.data.id + '/rate') -Headers $headers }
+        catch { if ($null -eq $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 404) { throw 'Demo rate lookup failed.' } }
+        if ($null -eq $rate) {
+            $rate = Invoke-RestMethod -Uri ($BaseUrl + '/api/v1/users/me/rate') -Method Put -Headers $headers -ContentType 'application/json' -Body (@{amount=$demoFlatPrice}|ConvertTo-Json)
+        }
+        if ([decimal]$rate.data.amount -ne $demoFlatPrice) { throw 'Existing demo rate differs from 100.00; it was not overwritten.' }
+    }
     [pscustomobject]@{ Username = $demo.Username; AccountId = $wallet.data.id; Balance = [decimal]$wallet.data.balance }
 }

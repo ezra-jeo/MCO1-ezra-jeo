@@ -23,9 +23,9 @@ public class AdminController {
     /** Preconditions: bearer identifies an active user in KINGPAY_ADMIN_USER_IDS.
      * Postconditions: returns credential-free global DTOs without modifying records.
      * @param caller framework principal; cannot be replaced by a query/body identity
-     * @return HTTP 200 with all users, balances, bookings and transfers; forbidden callers receive 403 */
+     * @return HTTP 200 with all users, balances, bookings, transfers, rates and requests; forbidden callers receive 403 */
     @Operation(summary = "Read all application records",
-            description = "Active caller's stable user ID must be in KINGPAY_ADMIN_USER_IDS; empty configuration denies everyone. Returns all users (including contact details/inactive users), balances, bookings and transfers as credential-free DTOs in ascending ID order. Read-only snapshot; unpaginated.")
+            description = "Active caller's stable user ID must be in KINGPAY_ADMIN_USER_IDS; empty configuration denies everyone. Returns all users (including contact details/inactive users), balances, bookings, transfers, published rates and protection requests as credential-free DTOs in ascending ID order. Read-only snapshot; unpaginated.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
                 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
                 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),

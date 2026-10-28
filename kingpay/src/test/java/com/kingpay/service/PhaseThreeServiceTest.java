@@ -38,12 +38,13 @@ import static org.mockito.Mockito.*;
 /** P3-S: isolated service rules with real caller resolution, no database or signing key. */
 class PhaseThreeServiceTest {
     enum Operation { PROFILE_GET, PROFILE_UPDATE, DEACTIVATE, HEROES, ACCOUNT_CREATE, ACCOUNT_GET, LOAD }
+    private final com.kingpay.repository.HeroRateRepository rates = mock(com.kingpay.repository.HeroRateRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final BookingRepository bookings = mock(BookingRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
     private final CurrentUser identities = new CurrentUser(users, entities);
-    private final UserService profiles = new UserService(users, accounts, bookings, identities, entities);
+    private final UserService profiles = new UserService(users, accounts, bookings, identities, entities, rates);
     private final AccountService wallets = new AccountService(accounts, identities, entities);
     private final Principal caller = () -> "owner";
     private User user;
@@ -76,7 +77,7 @@ class PhaseThreeServiceTest {
             case PROFILE_GET -> verify(users).findByUsername("owner");
             case PROFILE_UPDATE -> { assertThat(user.getFullName()).isEqualTo("Updated Owner"); verify(users).saveAndFlush(user); }
             case DEACTIVATE -> { assertThat(user.isActive()).isFalse(); verify(users).saveAndFlush(user); }
-            case HEROES -> verify(accounts).findByUser_IsSuperheroTrueAndUser_ActiveTrueOrderByUser_UsernameAsc();
+            case HEROES -> verify(rates).findByServiceProvider_User_IsSuperheroTrueAndServiceProvider_User_ActiveTrueOrderByServiceProvider_User_UsernameAsc();
             case ACCOUNT_CREATE -> verify(accounts).saveAndFlush(argThat(value -> value.getUser() == user && value.getBalance().signum() == 0));
             case ACCOUNT_GET -> verify(accounts).findByUser_Id(1L);
             case LOAD -> { assertThat(account.getBalance()).isEqualByComparingTo("25.00"); verify(entities).refresh(account, LockModeType.PESSIMISTIC_WRITE); }

@@ -1,10 +1,8 @@
 package com.kingpay.controller;
 
-import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.dto.response.ApiResponse;
 import com.kingpay.dto.response.BookingResponse;
 import com.kingpay.service.BookingService;
-import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import java.security.Principal;
 import java.util.List;
@@ -13,11 +11,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Private booking creation, completion and explicit customer-authorized payment. */
+/** Private accepted-booking reads, completion and explicit customer-authorized payment. */
 @RestController
 @RequestMapping("/api/v1/bookings")
 public class BookingController {
@@ -33,33 +30,6 @@ public class BookingController {
      */
     public BookingController(BookingService service) {
         this.service = service;
-    }
-
-    /**
-     * Routes booking creation to the Phase 5 service.
-     *
-     * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: Stores fixed parties/price in Unconfirmed state without moving money.
-     * @param request validated request body
-     * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return HTTP 201 with the newly created booking
-     */
-    @Operation(summary = "Create a fixed-price booking",
-            description = "Customer is the authenticated identity. Requires distinct wallets and an active superhero provider. Quote is fixed and positive; funds are not required and no money moves. Repeated creates are separate jobs.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Success", useReturnTypeSchema = true),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
-                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
-            })
-    @PostMapping
-    public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request, Principal caller) {
-        BookingResponse result = service.create(request, caller);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse<>("Booking created", result));
     }
 
     /**

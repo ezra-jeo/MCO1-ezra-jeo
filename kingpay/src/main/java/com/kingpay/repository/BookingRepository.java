@@ -11,6 +11,11 @@ import org.springframework.data.jpa.repository.EntityGraph;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
+    /** Preconditions: persisted proposal ID. Postconditions: no writes; unique origin enforces at most one result.
+     * @param requestId originating accepted request
+     * @return its booking, empty before acceptance */
+    java.util.Optional<Booking> findByProtectionRequest_Id(Long requestId);
+
     /** Preconditions: both IDs are the authenticated user's stable ID. Postconditions: no writes; references fetched together.
      * @param customerUserId caller ID in customer role
      * @param providerUserId same caller ID in provider role

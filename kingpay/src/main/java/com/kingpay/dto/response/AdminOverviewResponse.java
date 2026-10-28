@@ -8,7 +8,10 @@ import java.util.List;
  * @param users identities and contact details, excluding hashes/tokens
  * @param accounts wallet owners and balances
  * @param bookings all booking states and nullable payment links
- * @param transfers immutable successful transfer records */
+ * @param transfers immutable successful transfer records
+ * @param rates current publications
+ * @param protectionRequests all initial agreement states */
 public record AdminOverviewResponse(List<UserResponse> users, List<AccountResponse> accounts,
-        List<BookingResponse> bookings, List<TransferResponse> transfers) {
+        List<BookingResponse> bookings, List<TransferResponse> transfers,
+        List<HeroRateResponse> rates, List<ProtectionRequestResponse> protectionRequests) {
 }

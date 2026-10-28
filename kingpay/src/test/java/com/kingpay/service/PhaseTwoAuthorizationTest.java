@@ -41,7 +41,7 @@ class PhaseTwoAuthorizationTest {
     private final TransferRecordRepository ledger = mock(TransferRecordRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
     private final TransferService transfers = new TransferService(accounts, ledger, new CurrentUser(users, entities), entities);
-    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities, transfers);
+    private final BookingService service = new BookingService(bookings, new CurrentUser(users, entities), entities, transfers);
 
     /** Preconditions: mocks initialized. Postconditions: trusted test principals resolve persisted synthetic IDs. */
     @BeforeEach

@@ -15,6 +15,7 @@ import com.kingpay.entity.BookingStatus;
  * @param amount returned amount
  * @param status returned status
  * @param paymentTransferId returned paymentTransferId; null until paid
+ * @param protectionRequestId accepted origin, null for historical bookings
  */
 public record BookingResponse(
         Long id,
@@ -23,6 +24,7 @@ public record BookingResponse(
         Long serviceProviderAccountId,
         BigDecimal amount,
         BookingStatus status,
-        Long paymentTransferId
+        Long paymentTransferId,
+        Long protectionRequestId
 ) {
 }

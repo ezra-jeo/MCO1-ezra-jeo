@@ -1,6 +1,5 @@
 package com.kingpay.service;
 
-import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.entity.Account;
 import com.kingpay.entity.Booking;
 import com.kingpay.entity.BookingStatus;
@@ -38,12 +37,12 @@ import static org.mockito.Mockito.*;
 
 /** P5-U: isolated booking rules; confirmation and creation never write balances or ledger entries. */
 class BookingServiceTest {
-    enum Operation { CREATE, READ, LIST, CUSTOMER_CONFIRM, PROVIDER_CONFIRM, PAY }
+    enum Operation { READ, LIST, CUSTOMER_CONFIRM, PROVIDER_CONFIRM, PAY }
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final BookingRepository bookings = mock(BookingRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
-    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities, mock(TransferService.class));
+    private final BookingService service = new BookingService(bookings, new CurrentUser(users, entities), entities, mock(TransferService.class));
     private User customer;
     private User provider;
     private User outsider;
@@ -75,92 +74,6 @@ class BookingServiceTest {
             ReflectionTestUtils.setField(saved, "id", 30L);
             return saved;
         });
-    }
-
-    /** Preconditions: active distinct parties with zero funds. Postconditions: exact fixed quote saved without funding.
-     * @param price ordinary, minimum, or maximum representable positive quote */
-    @ParameterizedTest @ValueSource(strings = {"100.00", "0.01", "99999999999999999.99"})
-    void createStoresFixedPartiesAndPriceWithoutMoneyMovement(String price) {
-        var result = service.create(new CreateBookingRequest(10L, new BigDecimal(price)), () -> "customer");
-        assertThat(result.id()).isEqualTo(30L);
-        assertThat(result.customerAccountId()).isEqualTo(20L);
-        assertThat(result.serviceProviderAccountId()).isEqualTo(10L);
-        assertThat(result.amount()).isEqualByComparingTo(price);
-        assertThat(result.status()).isEqualTo(BookingStatus.Unconfirmed);
-        assertThat(result.paymentTransferId()).isNull();
-        assertThat(result.createdAt()).isNotNull();
-        verify(accounts).findByUser_Id(2L);
-        verify(accounts, never()).findByUser_Username(anyString());
-        var order = inOrder(entities);
-        order.verify(entities).refresh(provider, LockModeType.PESSIMISTIC_WRITE);
-        order.verify(entities).refresh(customer, LockModeType.PESSIMISTIC_WRITE);
-        noMoneyMovement();
-    }
-
-    /** Preconditions: invalid create request. Postconditions: no lookup, insert or financial effect.
-     * @param id documented case ID
-     * @param request malformed booking shape */
-    @ParameterizedTest(name = "{0}") @MethodSource("invalidRequests")
-    void invalidCreationFailsBeforePersistence(String id, CreateBookingRequest request) {
-        assertThrows(InvalidRequestException.class, () -> service.create(request, () -> "customer"));
-        verifyNoInteractions(users, accounts, bookings, entities);
-    }
-
-    /** Preconditions: customer has no wallet. Postconditions: missing-resource failure without booking insert. */
-    @Test
-    void accountlessCustomerCannotBook() {
-        when(accounts.findByUser_Id(2L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> service.create(request(), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
-    }
-
-    /** Preconditions: provider account absent. Postconditions: missing-resource failure, no financial effects. */
-    @Test
-    void missingProviderCannotBeBooked() {
-        when(accounts.findById(10L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> service.create(request(), () -> "customer"));
-        noMoneyMovement();
-    }
-
-    /** Preconditions: proposed provider is customer. Postconditions: self-booking rejected before insert. */
-    @Test
-    void selfBookingIsRejected() {
-        assertThrows(InvalidRequestException.class,
-                () -> service.create(new CreateBookingRequest(20L, BigDecimal.TEN), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
-    }
-
-    /** Preconditions: provider lacks eligibility. Postconditions: conflict, no booking or financial writes. */
-    @Test
-    void nonHeroProviderIsRejected() {
-        provider.setSuperhero(false);
-        assertThrows(BusinessConflictException.class, () -> service.create(request(), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
-        noMoneyMovement();
-    }
-
-    /** Preconditions: provider inactive. Postconditions: conflict without insert. */
-    @Test
-    void inactiveProviderIsRejected() {
-        provider.deactivate();
-        assertThrows(BusinessConflictException.class, () -> service.create(request(), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
-    }
-
-    /** Preconditions: customer deactivates while create waits. Postconditions: refreshed activity prevents insert. */
-    @Test
-    void customerActivityIsCheckedAfterLock() {
-        doAnswer(call -> { customer.deactivate(); return null; }).when(entities).refresh(customer, LockModeType.PESSIMISTIC_WRITE);
-        assertThrows(AccessDeniedException.class, () -> service.create(request(), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
-    }
-
-    /** Preconditions: eligibility removed while create waits. Postconditions: refreshed provider state prevents insert. */
-    @Test
-    void providerEligibilityIsCheckedAfterLock() {
-        doAnswer(call -> { provider.setSuperhero(false); return null; }).when(entities).refresh(provider, LockModeType.PESSIMISTIC_WRITE);
-        assertThrows(BusinessConflictException.class, () -> service.create(request(), () -> "customer"));
-        verify(bookings, never()).saveAndFlush(any());
     }
 
     /** Preconditions: confirmation actor deactivates while waiting. Postconditions: refresh rejects without status change.
@@ -313,10 +226,6 @@ class BookingServiceTest {
         return user;
     }
 
-    /** Preconditions: none. Postconditions: valid fixture request.
-     * @return provider account and quote */
-    private CreateBookingRequest request() { return new CreateBookingRequest(10L, new BigDecimal("100.00")); }
-
     /** Preconditions: fixtures initialized. Postconditions: balances stay zero and account repository is never written. */
     private void noMoneyMovement() {
         assertThat(customerAccount.getBalance()).isEqualByComparingTo("0");
@@ -330,7 +239,6 @@ class BookingServiceTest {
      * @param id booking ID */
     private void invoke(Operation operation, Principal caller, Long id) {
         switch (operation) {
-            case CREATE -> service.create(request(), caller);
             case READ -> service.getById(id, caller);
             case LIST -> service.getMine(caller);
             case CUSTOMER_CONFIRM -> service.confirmCustomer(id, caller);
@@ -348,20 +256,6 @@ class BookingServiceTest {
             if (customer && initial == BookingStatus.ServiceProviderConfirmed || !customer && initial == BookingStatus.CustomerConfirmed) { expected = BookingStatus.ConfirmedUnpaid; }
             return Arguments.of(customer, initial, expected);
         }));
-    }
-
-    /** Preconditions: none. Postconditions: invalid syntax/range matrix supplied.
-     * @return nine invalid create cases */
-    private static Stream<Arguments> invalidRequests() {
-        return Stream.of(Arguments.of("P5-U02a", null),
-                Arguments.of("P5-U02b", new CreateBookingRequest(null, BigDecimal.ONE)),
-                Arguments.of("P5-U02c", new CreateBookingRequest(0L, BigDecimal.ONE)),
-                Arguments.of("P5-U02d", new CreateBookingRequest(-1L, BigDecimal.ONE)),
-                Arguments.of("P5-U02e", new CreateBookingRequest(10L, null)),
-                Arguments.of("P5-U02f", new CreateBookingRequest(10L, BigDecimal.ZERO)),
-                Arguments.of("P5-U02g", new CreateBookingRequest(10L, BigDecimal.ONE.negate())),
-                Arguments.of("P5-U02h", new CreateBookingRequest(10L, new BigDecimal("1.001"))),
-                Arguments.of("P5-U02i", new CreateBookingRequest(10L, new BigDecimal("1E+17"))));
     }
 
     /** Preconditions: none. Postconditions: four identifier methods receive three invalid-ID cases each.

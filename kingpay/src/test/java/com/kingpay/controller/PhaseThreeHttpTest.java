@@ -32,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @Transactional
 class PhaseThreeHttpTest {
+    @Autowired private com.kingpay.repository.HeroRateRepository rates;
     enum Route { PROFILE_GET, PROFILE_UPDATE, DEACTIVATE, HEROES, ACCOUNT_CREATE, ACCOUNT_GET, LOAD }
     @Autowired private MockMvc mvc;
     @Autowired private UserRepository users;
@@ -141,6 +142,7 @@ class PhaseThreeHttpTest {
      * @throws Exception on HTTP failure */
     @Test
     void browsingFiltersEligibilityAndActivityAndHidesContacts() throws Exception {
+        rates.saveAndFlush(new com.kingpay.entity.HeroRate(heroAccount, new BigDecimal("100.00")));
         User inactive = users.saveAndFlush(identity("p3inactive_" + UUID.randomUUID().toString().substring(0, 8), true));
         inactive.deactivate();
         accountless.setSuperhero(true);

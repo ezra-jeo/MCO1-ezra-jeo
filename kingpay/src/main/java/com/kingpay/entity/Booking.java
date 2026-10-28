@@ -20,6 +20,42 @@ import java.time.Instant;
 @Table(name = "bookings")
 public class Booking {
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "protection_request_id", unique = true, updatable = false)
+    private ProtectionRequest protectionRequest;
+
+    /**
+     * Copies an accepted request's fixed terms into a new booking.
+     *
+     * <p>Preconditions: The request is persisted and the provider accepted it
+     * inside the owning transaction.
+     * <p>Postconditions: Fixed terms are copied and the creation timestamp is assigned;
+     * no money moves. The legacy constructor remains available for historical records.
+     * @param request accepted initial engagement
+     * @throws IllegalArgumentException if request is absent, unpersisted or not accepted
+     */
+    public Booking(ProtectionRequest request) {
+        if (request == null || request.getId() == null || request.getStatus() != ProtectionRequestStatus.Accepted) {
+            throw new IllegalArgumentException("A persisted accepted request is required.");
+        }
+        this.protectionRequest = request;
+        this.customer = request.getCustomer();
+        this.serviceProvider = request.getServiceProvider();
+        this.amount = request.getAmount();
+        this.createdAt = Instant.now();
+    }
+
+    /**
+     * Reads protectionRequest.
+     *
+     * <p>Preconditions: None.
+     * <p>Postconditions: State is unchanged.
+     * @return the originating accepted request; null for historical bookings
+     */
+    public ProtectionRequest getProtectionRequest() {
+        return protectionRequest;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

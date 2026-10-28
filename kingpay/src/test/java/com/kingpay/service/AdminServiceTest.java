@@ -108,5 +108,5 @@ class AdminServiceTest {
     /** Preconditions: test-controlled IDs. Postconditions: service uses exactly that allowlist.
      * @param ids allowed IDs
      * @return admin service fixture */
-    private AdminService service(Set<Long> ids) { return new AdminService(users, accounts, bookings, transfers, identities, new AdminSettings(ids)); }
+    private AdminService service(Set<Long> ids) { return new AdminService(users, accounts, bookings, transfers, identities, new AdminSettings(ids), mock(com.kingpay.repository.HeroRateRepository.class), mock(com.kingpay.repository.ProtectionRequestRepository.class)); }
 }
