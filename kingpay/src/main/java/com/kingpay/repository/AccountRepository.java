@@ -11,6 +11,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AccountRepository extends JpaRepository<Account, Long> {
 
+    /** Preconditions: userId is the authenticated persisted identity. Postconditions: no mutable username dependency or writes.
+     * @param userId stable owner ID
+     * @return owner's wallet, or empty when absent */
+    Optional<Account> findByUser_Id(Long userId);
+
     /** Preconditions: caller authorization belongs to service. Postconditions: one joined query, no writes.
      * @return active eligible provider wallets ordered by username, with initialized user details */
     @EntityGraph(attributePaths = "user")

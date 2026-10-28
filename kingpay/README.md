@@ -2,7 +2,7 @@
 
 Kingpay is a fictional superhero protection booking and wallet API. The planned flow creates a booking, collects both participants' completion confirmations, and lets the customer explicitly pay its fixed price. Wallets start at zero and can receive simulated loads. Standalone transfers have a separate permanent ledger.
 
-**Current state: Phase 4 implemented.** Registration/login, profiles, superhero selection, wallet loading, atomic standalone transfers and private transfer history work. Booking creation/confirmations and booking-associated payment remain Phases 5–6. See the [Phase 4 report](docs/phase-4-report.md) and [endpoint inventory](docs/skeleton-status.md).
+**Current state: Phase 5 implemented.** Registration/login, profiles, superhero selection, wallet loading, atomic standalone transfers, private history, booking creation and both-party confirmations work. Explicit booking payment remains Phase 6. See the [Phase 5 report](docs/phase-5-report.md) and [endpoint inventory](docs/skeleton-status.md).
 
 ## Prerequisites and dependency installation
 
@@ -65,9 +65,9 @@ The script compiles with cached Maven dependencies and checks the entity, DTO, e
 mvn test
 ```
 
-The full suite passes **333 tests** with zero failures/errors/skips. The [Phase 4 report](docs/phase-4-report.md) records unit, HTTP/security, actual SQL rollback and committed concurrency evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
+The full suite passes **482 tests** with zero failures/errors/skips, including 149 Phase 5 booking cases. The [Phase 5 report](docs/phase-5-report.md) records lifecycle, HTTP/security and committed concurrency evidence. The [Phase 4 report](docs/phase-4-report.md) records standalone-transfer SQL rollback evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
 
-Registration, [Phase 2](docs/test-cases/phase-2.md), [Phase 3](docs/test-cases/phase-3.md) and [Phase 4](docs/test-cases/phase-4.md) have documented executable cases, with at least three per affected service/controller method. Future booking/payment methods still need their own cases; no coverage report is claimed.
+Registration, [Phase 2](docs/test-cases/phase-2.md), [Phase 3](docs/test-cases/phase-3.md), [Phase 4](docs/test-cases/phase-4.md) and [Phase 5](docs/test-cases/phase-5.md) have documented executable cases, with at least three per affected service/controller method. Payment business cases remain Phase 6; no coverage report is claimed.
 
 The isolated account entity suite can run before datasource setup:
 
@@ -143,7 +143,7 @@ Each successful request adds that amount; retrying a successful request adds it 
 
 Profile routes are `GET/PUT/DELETE /api/v1/users/me`. PUT fully replaces username, fullName, phone, email and isSuperhero; server-owned fields cannot be changed through that body. Unknown JSON fields are ignored. DELETE freezes the user only when the wallet is zero and no outstanding booking exists in either role; it retains wallet, booking and ledger records. State conflicts return 409. Inactive users' tokens are rejected with 401.
 
-`GET /api/v1/users/superheroes` returns active eligible users with wallets, including their `accountId` for the future booking request. Contact details and balances are omitted. Removing provider eligibility while assigned work is unfinished/unpaid returns 409.
+`GET /api/v1/users/superheroes` returns active eligible users with wallets, including their `accountId` for the booking request. Contact details and balances are omitted. Removing provider eligibility while assigned work is unfinished/unpaid returns 409.
 
 Registration already creates a wallet. `POST /api/v1/accounts` creates a zero wallet for an accountless user and returns 409 for an existing wallet; it accepts no opening-balance input.
 
@@ -178,5 +178,35 @@ Invoke-RestMethod ('http://localhost:8080/api/v1/transfers/history/' + $sourceWa
 A successful transfer returns 200 with ID, source/destination IDs, exact amount and timestamp. Both balance updates and one ledger insertion commit together. History is private to its account owner and includes incoming/outgoing successful transfers, newest first; no results returns an empty array.
 
 Self-transfers and invalid amounts return 400; missing accounts 404; wrong source/history owner 403; insufficient funds, inactive recipients and capacity conflicts 409. Missing/invalid bearer authentication returns 401. No ledger edit/delete endpoint exists. Repeated successful requests are separate transfers, and standalone transfers do not mark bookings paid.
+
+## Booking and two-party completion
+
+Continue with the customer `$authHeaders` and `$recipientAccountId` from above. Log in as the selected demo superhero using its local `.env.demo` password, then create a fixed-price job and confirm each side:
+
+```powershell
+$heroCredential = Get-Credential -UserName 'demo-superhero' -Message 'Use the local demo password'
+$heroLoginBody = @{ username = $heroCredential.UserName; password = $heroCredential.GetNetworkCredential().Password } | ConvertTo-Json
+$heroLogin = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post `
+  -ContentType 'application/json' -Body $heroLoginBody
+$heroHeaders = @{ Authorization = 'Bearer ' + $heroLogin.data.token }
+$customerBefore = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders).data.balance
+$heroBefore = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $heroHeaders).data.balance
+$bookingBody = @{ serviceProviderAccountId = $recipientAccountId; amount = [decimal]100.00 } | ConvertTo-Json
+$createdBooking = Invoke-RestMethod http://localhost:8080/api/v1/bookings -Method Post `
+  -Headers $authHeaders -ContentType 'application/json' -Body $bookingBody
+$bookingUrl = 'http://localhost:8080/api/v1/bookings/' + $createdBooking.data.id
+Invoke-RestMethod ($bookingUrl + '/confirmations/service-provider') -Method Post -Headers $heroHeaders
+Invoke-RestMethod ($bookingUrl + '/confirmations/customer') -Method Post -Headers $authHeaders
+Invoke-RestMethod $bookingUrl -Headers $authHeaders
+Invoke-RestMethod http://localhost:8080/api/v1/bookings -Headers $authHeaders
+$customerAfter = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders).data.balance
+$heroAfter = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $heroHeaders).data.balance
+if ($customerBefore -ne $customerAfter -or $heroBefore -ne $heroAfter) { throw 'Unexpected booking balance change.' }
+[pscustomobject]@{ CustomerBefore = $customerBefore; CustomerAfter = $customerAfter; HeroBefore = $heroBefore; HeroAfter = $heroAfter }
+```
+
+Creation returns 201 with `Unconfirmed`; the first confirmation above returns `ServiceProviderConfirmed`, and the second returns `ConfirmedUnpaid`. Customer-first also works through `CustomerConfirmed`. Each participant can confirm only their assigned side. Repeats return 200 with the current state, including historical paid bookings; they never transfer funds or reset payment links. Reads are private to either participant, and lists include both roles ordered by creation time then ID descending.
+
+The authenticated identity selects the customer. Only provider account ID and exact positive price are accepted inputs. Zero funds are allowed at booking time; active provider eligibility and distinct wallet owners are required. Invalid prices/self-booking return 400, missing wallets/bookings 404, unrelated/wrong-side actions 403, and unavailable providers 409. Customer/provider/price cannot be replaced later. There are no generic booking edit/delete routes or cancellation flow. Repeating creation creates another independent booking. `/payment` remains an authorized-customer 501 placeholder until Phase 6.
 
 The example changes the recipient's balance. Demo preparation does not undo transfers or reduce balances above its targets. The acceptance tests use isolated 1000.00/500.00 fixtures and verify 900.00/600.00 after a 100.00 transfer without changing the prepared demo wallets.

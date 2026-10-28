@@ -5,10 +5,18 @@ import com.kingpay.entity.BookingStatus;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 /** Booking persistence; service authorization is required for identifier-based lookups. */
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
+
+    /** Preconditions: both IDs are the authenticated user's stable ID. Postconditions: no writes; references fetched together.
+     * @param customerUserId caller ID in customer role
+     * @param providerUserId same caller ID in provider role
+     * @return participant bookings ordered by creation time and ID descending */
+    @EntityGraph(attributePaths = {"customer", "serviceProvider", "paymentTransfer"})
+    List<Booking> findByCustomer_User_IdOrServiceProvider_User_IdOrderByCreatedAtDescIdDesc(Long customerUserId, Long providerUserId);
 
     /** Preconditions: account ID and excluded status are persisted values. Postconditions: no writes.
      * @param serviceProviderId provider account ID

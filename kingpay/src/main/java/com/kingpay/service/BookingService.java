@@ -2,112 +2,200 @@ package com.kingpay.service;
 
 import com.kingpay.dto.request.CreateBookingRequest;
 import com.kingpay.dto.response.BookingResponse;
+import com.kingpay.entity.Account;
+import com.kingpay.entity.Booking;
+import com.kingpay.entity.BookingStatus;
+import com.kingpay.entity.User;
+import com.kingpay.exception.BusinessConflictException;
+import com.kingpay.exception.InvalidRequestException;
+import com.kingpay.exception.ResourceNotFoundException;
 import com.kingpay.exception.UnimplementedOperationException;
-import com.kingpay.security.OwnershipGuard;
+import com.kingpay.repository.AccountRepository;
+import com.kingpay.repository.BookingRepository;
+import com.kingpay.security.CurrentUser;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.validation.Valid;
+import java.math.BigDecimal;
 import java.security.Principal;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 
-/** Draft booking boundary; no business operations are implemented. */
+/** Fixed-price booking creation, private participant reads and idempotent completion; no money movement. */
 @Service
+@Validated
+@Transactional(readOnly = true)
 public class BookingService {
+    private static final BigDecimal MAX_PRICE = new BigDecimal("99999999999999999.99");
+    private static final int MONEY_SCALE = 2;
+    private final AccountRepository accounts;
+    private final BookingRepository bookings;
+    private final CurrentUser identities;
+    private final EntityManager entities;
 
-    private final OwnershipGuard ownership;
-
-    /**
-     * Receives participant authorization for the later booking implementation.
-     * <p>Preconditions: ownership is non-null.
-     * <p>Postconditions: identifier-based operations verify the correct participant role.
-     * @param ownership authorization guard
-     */
-    public BookingService(OwnershipGuard ownership) {
-        this.ownership = ownership;
+    /** Preconditions: Spring supplies persistence/security. Postconditions: no queries or writes.
+     * @param accounts wallet/party lookup
+     * @param bookings booking persistence
+     * @param identities active caller resolver
+     * @param entities ordered locking context */
+    public BookingService(AccountRepository accounts, BookingRepository bookings, CurrentUser identities, EntityManager entities) {
+        this.accounts = accounts;
+        this.bookings = bookings;
+        this.identities = identities;
+        this.entities = entities;
     }
 
-    /**
-     * Reserves booking creation for Phase 5.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param request operation input
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
-    public BookingResponse create(CreateBookingRequest request, Principal caller) {
-        throw new UnimplementedOperationException("Booking creation");
+    /** Preconditions: active customer wallet, distinct active eligible provider wallet and positive exact price.
+     * Postconditions: one Unconfirmed booking stores fixed parties/price; no balance or ledger changes.
+     * @param request provider wallet ID and agreed DECIMAL(19,2) price
+     * @param caller framework principal defining the customer
+     * @return newly persisted booking
+     * @throws BusinessConflictException if provider eligibility/activity no longer allows booking */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public BookingResponse create(@Valid CreateBookingRequest request, Principal caller) {
+        BigDecimal price = validatedPrice(request);
+        User actor = identities.active(caller);
+        Account customer = accounts.findByUser_Id(actor.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
+        Account provider = accounts.findById(request.serviceProviderAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("Provider account not found."));
+        if (customer.getUser().getId().equals(provider.getUser().getId())) {
+            throw new InvalidRequestException("Customer and provider must differ.");
+        }
+        lockOwners(customer, provider);
+        requireActive(customer.getUser());
+        if (!provider.getUser().isActive() || !provider.getUser().isSuperhero()) {
+            throw new BusinessConflictException("Provider must be active and eligible.");
+        }
+        return response(bookings.saveAndFlush(new Booking(customer, provider, price)));
     }
 
-    /**
-     * Reserves participant booking lookup for Phase 5.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param bookingId operation input
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
+    /** Preconditions: active caller is either participant. Postconditions: private DTO only; no writes.
+     * @param bookingId requested booking ID
+     * @param caller framework principal
+     * @return participant's booking */
     public BookingResponse getById(Long bookingId, Principal caller) {
-        ownership.bookingParticipant(bookingId, caller);
-        throw new UnimplementedOperationException("Participant booking lookup");
+        User actor = identities.active(caller);
+        Booking booking = booking(bookingId);
+        if (!booking.getCustomer().getUser().getId().equals(actor.getId())
+                && !booking.getServiceProvider().getUser().getId().equals(actor.getId())) {
+            throw new AccessDeniedException("Access denied.");
+        }
+        return response(booking);
     }
 
-    /**
-     * Reserves participant booking list for Phase 5.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
+    /** Preconditions: active caller. Postconditions: only caller's bookings in either role, newest-first; no writes.
+     * @param caller framework principal
+     * @return participant DTOs, empty when no bookings exist */
     public List<BookingResponse> getMine(Principal caller) {
-        throw new UnimplementedOperationException("Participant booking list");
+        User actor = identities.active(caller);
+        return bookings.findByCustomer_User_IdOrServiceProvider_User_IdOrderByCreatedAtDescIdDesc(actor.getId(), actor.getId())
+                .stream().map(this::response).toList();
     }
 
-    /**
-     * Reserves customer completion confirmation for Phase 5.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param bookingId operation input
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
+    /** Preconditions: active assigned customer. Postconditions: records own confirmation; repeats are no-ops, including paid jobs.
+     * @param bookingId fixed-party booking ID
+     * @param caller framework principal
+     * @return current booking state without financial changes */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse confirmCustomer(Long bookingId, Principal caller) {
-        ownership.bookingCustomer(bookingId, caller);
-        throw new UnimplementedOperationException("Customer completion confirmation");
+        return confirm(bookingId, caller, true);
     }
 
-    /**
-     * Reserves service provider completion confirmation for Phase 5.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param bookingId operation input
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
+    /** Preconditions: active assigned provider. Postconditions: records own confirmation; repeats are no-ops, including paid jobs.
+     * @param bookingId fixed-party booking ID
+     * @param caller framework principal
+     * @return current booking state without financial changes */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse confirmServiceProvider(Long bookingId, Principal caller) {
-        ownership.bookingProvider(bookingId, caller);
-        throw new UnimplementedOperationException("Service provider completion confirmation");
+        return confirm(bookingId, caller, false);
     }
 
-    /**
-     * Reserves booking payment for Phase 6.
-     *
-     * <p>Preconditions: HTTP callers are authenticated; resource-ID operations enforce ownership before the placeholder.
-     * <p>Postconditions: This operation remains unimplemented and changes no state.
-     * @param bookingId operation input
-     * @param caller authenticated principal; never supplied by the request body
-     * @return the future operation result; this skeleton always throws
-     * @throws UnimplementedOperationException after authorization succeeds, until business behavior is implemented
-     */
+    /** Preconditions: active customer owns booking. Postconditions: Phase 6 placeholder changes nothing.
+     * @param bookingId requested booking ID
+     * @param caller framework principal
+     * @return future payment result; currently always throws after authorization
+     * @throws UnimplementedOperationException until Phase 6 implements payment */
     public BookingResponse pay(Long bookingId, Principal caller) {
-        ownership.bookingCustomer(bookingId, caller);
+        User actor = identities.active(caller);
+        requireRole(booking(bookingId), actor, true);
         throw new UnimplementedOperationException("Booking payment");
+    }
+
+    /** Preconditions: caller authenticated. Postconditions: authorized transition serializes with other booking writers.
+     * @param id booking ID
+     * @param caller framework principal
+     * @param asCustomer true for customer confirmation, false for provider
+     * @return current state; never transfers funds */
+    private BookingResponse confirm(Long id, Principal caller, boolean asCustomer) {
+        User actor = identities.active(caller);
+        Booking booking = booking(id);
+        requireRole(booking, actor, asCustomer);
+        lockOwners(booking.getCustomer(), booking.getServiceProvider());
+        entities.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
+        requireActive(asCustomer ? booking.getCustomer().getUser() : booking.getServiceProvider().getUser());
+        BookingStatus before = booking.getStatus();
+        if (asCustomer) { booking.confirmCustomer(); } else { booking.confirmServiceProvider(); }
+        if (booking.getStatus() != before) { bookings.saveAndFlush(booking); }
+        return response(booking);
+    }
+
+    /** Preconditions: parties are distinct persisted owners, service write transaction active.
+     * Postconditions: current owner state locked in ascending user-ID order, coordinating eligibility/deactivation.
+     * @param customer customer wallet
+     * @param provider assigned provider wallet */
+    private void lockOwners(Account customer, Account provider) {
+        List<User> owners = Stream.of(customer.getUser(), provider.getUser()).sorted(Comparator.comparing(User::getId)).toList();
+        for (User owner : owners) { entities.refresh(owner, LockModeType.PESSIMISTIC_WRITE); }
+    }
+
+    /** Preconditions: none. Postconditions: invalid identifier or absent record fails safely.
+     * @param id booking ID
+     * @return existing booking */
+    private Booking booking(Long id) {
+        if (id == null || id <= 0) { throw new InvalidRequestException("A positive booking ID is required."); }
+        return bookings.findById(id).orElseThrow(() -> new ResourceNotFoundException("Booking not found."));
+    }
+
+    /** Preconditions: actor and parties persisted. Postconditions: other role/outsiders receive 403.
+     * @param booking protected booking
+     * @param actor authenticated identity
+     * @param asCustomer required participant role */
+    private void requireRole(Booking booking, User actor, boolean asCustomer) {
+        Long expected = asCustomer ? booking.getCustomer().getUser().getId() : booking.getServiceProvider().getUser().getId();
+        if (!expected.equals(actor.getId())) { throw new AccessDeniedException("Access denied."); }
+    }
+
+    /** Preconditions: identity just refreshed under lock. Postconditions: inactive actor cannot mutate booking.
+     * @param actor persisted participant */
+    private void requireActive(User actor) {
+        if (!actor.isActive()) { throw new AccessDeniedException("Access denied."); }
+    }
+
+    /** Preconditions: none. Postconditions: syntax/range errors rejected and exact price returned without writes.
+     * @param request submitted booking data
+     * @return normalized positive price */
+    private BigDecimal validatedPrice(CreateBookingRequest request) {
+        if (request == null || request.serviceProviderAccountId() == null || request.serviceProviderAccountId() <= 0
+                || request.amount() == null || request.amount().signum() <= 0 || request.amount().scale() > MONEY_SCALE
+                || request.amount().compareTo(MAX_PRICE) > 0) {
+            throw new InvalidRequestException("Provider ID and a positive price fitting 17 integer and 2 fractional digits are required.");
+        }
+        return request.amount().setScale(MONEY_SCALE);
+    }
+
+    /** Preconditions: authorized persisted booking. Postconditions: only declared IDs/status/price/time exposed.
+     * @param booking protected booking
+     * @return immutable response; payment link null before payment */
+    private BookingResponse response(Booking booking) {
+        return new BookingResponse(booking.getId(), booking.getCreatedAt(), booking.getCustomer().getId(),
+                booking.getServiceProvider().getId(), booking.getAmount(), booking.getStatus(),
+                booking.getPaymentTransfer() == null ? null : booking.getPaymentTransfer().getId());
     }
 }

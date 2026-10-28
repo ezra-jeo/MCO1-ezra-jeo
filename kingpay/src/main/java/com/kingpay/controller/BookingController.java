@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Draft HTTP routes; service stubs deliberately report HTTP 501. */
+/** Private booking creation, reads and completion; payment remains the Phase 6 placeholder. */
 @RestController
 @RequestMapping("/api/v1/bookings")
 public class BookingController {
@@ -38,10 +38,10 @@ public class BookingController {
      * Routes booking creation to the Phase 5 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Stores fixed parties/price in Unconfirmed state without moving money.
      * @param request validated request body
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 201 with the newly created booking
      */
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request, Principal caller) {
@@ -54,10 +54,10 @@ public class BookingController {
      * Routes participant booking lookup to the Phase 5 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Either assigned participant receives the booking without changing state.
      * @param bookingId resource identifier
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the private booking DTO
      */
     @GetMapping("/{bookingId}")
     public ResponseEntity<ApiResponse<BookingResponse>> getById(@PathVariable("bookingId") Long bookingId, Principal caller) {
@@ -70,9 +70,9 @@ public class BookingController {
      * Routes participant booking list to the Phase 5 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Returns only the caller's bookings in either role, newest first.
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with participant booking DTOs, or an empty list
      */
     @GetMapping
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getMine(Principal caller) {
@@ -85,10 +85,10 @@ public class BookingController {
      * Routes customer completion confirmation to the Phase 5 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Records the assigned customer's confirmation; repeats preserve state and no money moves.
      * @param bookingId resource identifier
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the current booking state
      */
     @PostMapping("/{bookingId}/confirmations/customer")
     public ResponseEntity<ApiResponse<BookingResponse>> confirmCustomer(@PathVariable("bookingId") Long bookingId, Principal caller) {
@@ -101,10 +101,10 @@ public class BookingController {
      * Routes service provider completion confirmation to the Phase 5 service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Records the assigned provider's confirmation; repeats preserve state and no money moves.
      * @param bookingId resource identifier
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the current booking state
      */
     @PostMapping("/{bookingId}/confirmations/service-provider")
     public ResponseEntity<ApiResponse<BookingResponse>> confirmServiceProvider(@PathVariable("bookingId") Long bookingId, Principal caller) {

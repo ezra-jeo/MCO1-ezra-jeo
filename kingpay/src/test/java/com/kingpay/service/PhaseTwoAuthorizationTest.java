@@ -41,7 +41,7 @@ class PhaseTwoAuthorizationTest {
     private final TransferRecordRepository ledger = mock(TransferRecordRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
     private final TransferService transfers = new TransferService(accounts, ledger, new CurrentUser(users, entities), entities);
-    private final BookingService service = new BookingService(guard);
+    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities);
 
     /** Preconditions: mocks initialized. Postconditions: trusted test principals resolve persisted synthetic IDs. */
     @BeforeEach
@@ -56,6 +56,7 @@ class PhaseTwoAuthorizationTest {
             ReflectionTestUtils.setField(record, "id", 100L);
             return record;
         });
+        when(bookings.saveAndFlush(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     /** Preconditions: real owner/assigned actor calls. Postconditions: transfer/history succeed or booking guard reaches placeholder.
@@ -64,7 +65,7 @@ class PhaseTwoAuthorizationTest {
     void allowedActorReachesPlaceholder(Action action) {
         seed();
         String actor = action == Action.PROVIDER_CONFIRM ? "provider" : "customer";
-        if (action == Action.TRANSFER || action == Action.HISTORY) {
+        if (action != Action.PAY) {
             assertDoesNotThrow(() -> invoke(action, 1L, () -> actor));
         } else {
             assertThrows(UnimplementedOperationException.class, () -> invoke(action, 1L, () -> actor));

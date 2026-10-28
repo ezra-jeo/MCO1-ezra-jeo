@@ -58,8 +58,8 @@ public class Booking {
     /**
      * Assigns the initial data shape without applying business validation.
      *
-     * <p>Preconditions: The future service validates all supplied data before persistence.
-     * <p>Postconditions: Initial fields are assigned; ownership and financial rules are not implemented.
+     * <p>Preconditions: The service validates all supplied data before persistence.
+     * <p>Postconditions: Initial fields are assigned; this constructor does not authorize parties or move funds.
      * @param customer initial customer
      * @param serviceProvider initial serviceProvider
      * @param amount initial amount

@@ -182,13 +182,13 @@ class PhaseTwoSecurityTest {
                 .andExpect(status().isOk());
     }
 
-    /** Preconditions: assigned actor authenticates. Postconditions: transfer/history return 200; future booking operations return 501.
+    /** Preconditions: assigned actor authenticates. Postconditions: implemented operations return 200; payment remains 501.
      * @param action protected method
      * @throws Exception on HTTP failure */
     @ParameterizedTest @EnumSource(Action.class)
     void allowedActorsReachBusinessPlaceholder(Action action) throws Exception {
         call(action, false, action == Action.PROVIDER_CONFIRM ? provider : customer)
-                .andExpect(status().is(action == Action.TRANSFER || action == Action.HISTORY ? 200 : 501));
+                .andExpect(status().is(action == Action.PAY ? 501 : 200));
     }
 
     /** Preconditions: unrelated caller authenticates. Postconditions: 403 without executing future mutation.
@@ -225,7 +225,7 @@ class PhaseTwoSecurityTest {
         call(Action.CUSTOMER_CONFIRM, false, provider).andExpect(status().isForbidden());
         call(Action.PAY, false, provider).andExpect(status().isForbidden());
         call(Action.PROVIDER_CONFIRM, false, customer).andExpect(status().isForbidden());
-        call(Action.BOOKING_READ, false, provider).andExpect(status().isNotImplemented());
+        call(Action.BOOKING_READ, false, provider).andExpect(status().isOk());
     }
 
     /** Preconditions: invalid password fields submitted. Postconditions: field errors useful, no rejected secret echoed/logged.
