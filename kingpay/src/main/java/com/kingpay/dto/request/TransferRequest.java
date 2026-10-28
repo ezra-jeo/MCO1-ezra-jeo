@@ -1,5 +1,6 @@
 package com.kingpay.dto.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 public record TransferRequest(
         @NotNull @Positive Long fromId,
         @NotNull @Positive Long toId,
+        @Schema(description = "Exact positive DECIMAL(19,2), at most 17 integer and 2 fractional digits; no rounding.", example = "100.00", minimum = "0", exclusiveMinimum = true, maximum = "99999999999999999.99", multipleOf = 0.01)
         @NotNull @DecimalMin(value = "0.00", inclusive = false) @Digits(integer = 17, fraction = 2) BigDecimal amount
 ) {
 }

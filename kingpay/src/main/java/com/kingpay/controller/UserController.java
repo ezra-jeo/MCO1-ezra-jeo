@@ -6,6 +6,7 @@ import com.kingpay.dto.response.SuperheroResponse;
 import com.kingpay.dto.response.UserResponse;
 import com.kingpay.service.UserService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import java.security.Principal;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,14 @@ public class UserController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with the owner's profile
      */
+    @Operation(summary = "Read my profile",
+            description = "Returns only the authenticated user's current profile and contact details.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getMe(Principal caller) {
         UserResponse result = service.getMe(caller);
@@ -59,6 +68,17 @@ public class UserController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with the updated owner's profile
      */
+    @Operation(summary = "Replace my editable profile",
+            description = "Replaces username, fullName, phone, email and isSuperhero. Server-owned fields cannot be changed. Outstanding provider work prevents removing eligibility.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> updateMe(@Valid @RequestBody UpdateUserRequest request, Principal caller) {
         UserResponse result = service.updateMe(request, caller);
@@ -74,6 +94,16 @@ public class UserController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 204 with no body after guarded deactivation
      */
+    @Operation(summary = "Deactivate my user",
+            description = "Requires zero wallet balance and no outstanding booking in either role. Freezes only the user; all financial/history rows are retained.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @DeleteMapping("/me")
     public ResponseEntity<Void> deactivateMe(Principal caller) {
         service.deactivateMe(caller);
@@ -88,6 +118,13 @@ public class UserController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with sorted bookable superhero summaries
      */
+    @Operation(summary = "List bookable superheroes",
+            description = "Active eligible providers with wallet IDs, without contact details or balances.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @GetMapping("/superheroes")
     public ResponseEntity<ApiResponse<List<SuperheroResponse>>> getSuperheroes(Principal caller) {
         List<SuperheroResponse> result = service.getSuperheroes(caller);

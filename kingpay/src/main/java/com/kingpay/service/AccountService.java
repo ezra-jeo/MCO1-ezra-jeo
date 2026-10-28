@@ -87,7 +87,7 @@ public class AccountService {
      * @return owned account
      * @throws ResourceNotFoundException if no wallet exists */
     private Account ownedAccount(User user) {
-        return accounts.findByUser_Username(user.getUsername())
+        return accounts.findByUser_Id(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Account not found."));
     }
 

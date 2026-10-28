@@ -383,14 +383,14 @@ class BookingPersistenceTest {
         noMoney();
     }
 
-    /** Preconditions: both confirmed. Postconditions: payment remains 501 and no money moves.
+    /** Preconditions: both confirmed. Postconditions: zero-funded payment fails and no money moves.
      * @throws Exception on HTTP failure */
     @Test
-    void completedBookingStillRequiresPhaseSixPayment() throws Exception {
+    void completedBookingWithoutFundsRemainsUnpaid() throws Exception {
         long id = createBooking();
         service.confirmCustomer(id, () -> customer.getUsername());
         service.confirmServiceProvider(id, () -> provider.getUsername());
-        mvc.perform(auth(post("/api/v1/bookings/" + id + "/payment"), customer)).andExpect(status().isNotImplemented());
+        mvc.perform(auth(post("/api/v1/bookings/" + id + "/payment"), customer)).andExpect(status().isConflict());
         assertThat(state(id)).isEqualTo("ConfirmedUnpaid");
         noMoney();
     }

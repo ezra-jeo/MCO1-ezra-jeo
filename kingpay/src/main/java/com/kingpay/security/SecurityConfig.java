@@ -42,7 +42,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /** Stateless bearer authentication with a local signing key and database-backed identities. */
 @Configuration
-@EnableConfigurationProperties(JwtSettings.class)
+@EnableConfigurationProperties({JwtSettings.class, AdminSettings.class})
 public class SecurityConfig {
 
     private static final int BCRYPT_STRENGTH = 12;
@@ -136,7 +136,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Protects all routes except the two public authentication POST endpoints.
+     * Protects business routes while allowing public authentication POSTs and read-only API documentation.
      * <p>Preconditions: JWT and JSON infrastructure are configured.
      * <p>Postconditions: bearer authentication is stateless; security failures use the API envelope.
      * @param http Spring Security builder
@@ -152,6 +152,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, error) ->

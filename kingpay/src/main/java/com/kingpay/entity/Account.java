@@ -40,8 +40,8 @@ public class Account {
     /**
      * Assigns the initial data shape without applying business validation.
      *
-     * <p>Preconditions: The future service validates all supplied data before persistence.
-     * <p>Postconditions: Initial fields are assigned; ownership and financial rules are not implemented.
+     * <p>Preconditions: The application service validates all supplied data before persistence.
+     * <p>Postconditions: Initial fields are assigned; the application service owns authorization and transactional persistence.
      * @param user initial user
      * @param balance initial balance
      */

@@ -87,9 +87,9 @@ try {
     $authResponse = Read-Source 'dto/response/AuthResponse.java'
     Assert-Contract ($authResponse -match '\[redacted\]') 'AuthResponse must redact its token in string representations.'
 
-    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 6 }
-    $expectedPlaceholderCounts = @{ Auth = 0; User = 0; Account = 0; Transfer = 0; Booking = 1 }
-    $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings' }
+    $expectedMethodCounts = @{ Auth = 2; User = 4; Account = 3; Transfer = 2; Booking = 6; Admin = 1 }
+    $expectedPlaceholderCounts = @{ Auth = 0; User = 0; Account = 0; Transfer = 0; Booking = 0; Admin = 0 }
+    $routeBases = @{ Auth = 'auth'; User = 'users'; Account = 'accounts'; Transfer = 'transfers'; Booking = 'bookings'; Admin = 'admin' }
     foreach ($name in $expectedMethodCounts.Keys) {
         $service = Read-Source "service/${name}Service.java"
         $expectedCount = $expectedMethodCounts[$name]

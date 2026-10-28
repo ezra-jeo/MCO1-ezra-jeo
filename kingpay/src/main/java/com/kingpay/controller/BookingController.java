@@ -5,6 +5,7 @@ import com.kingpay.dto.response.ApiResponse;
 import com.kingpay.dto.response.BookingResponse;
 import com.kingpay.service.BookingService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import java.security.Principal;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Private booking creation, reads and completion; payment remains the Phase 6 placeholder. */
+/** Private booking creation, completion and explicit customer-authorized payment. */
 @RestController
 @RequestMapping("/api/v1/bookings")
 public class BookingController {
@@ -43,6 +44,17 @@ public class BookingController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 201 with the newly created booking
      */
+    @Operation(summary = "Create a fixed-price booking",
+            description = "Customer is the authenticated identity. Requires distinct wallets and an active superhero provider. Quote is fixed and positive; funds are not required and no money moves. Repeated creates are separate jobs.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> create(@Valid @RequestBody CreateBookingRequest request, Principal caller) {
         BookingResponse result = service.create(request, caller);
@@ -59,6 +71,16 @@ public class BookingController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with the private booking DTO
      */
+    @Operation(summary = "Read a participant booking",
+            description = "Only assigned customer or provider can read the booking. Parties and price remain fixed.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @GetMapping("/{bookingId}")
     public ResponseEntity<ApiResponse<BookingResponse>> getById(@PathVariable("bookingId") Long bookingId, Principal caller) {
         BookingResponse result = service.getById(bookingId, caller);
@@ -74,6 +96,14 @@ public class BookingController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with participant booking DTOs, or an empty list
      */
+    @Operation(summary = "List my bookings",
+            description = "Returns caller's bookings in either role, newest first with descending ID tie-break. Empty array when none; unpaginated.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @GetMapping
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getMine(Principal caller) {
         List<BookingResponse> result = service.getMine(caller);
@@ -90,6 +120,16 @@ public class BookingController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with the current booking state
      */
+    @Operation(summary = "Confirm customer completion",
+            description = "Assigned customer only. Either confirmation order is supported; both reach ConfirmedUnpaid. Repeats preserve current state/link, including paid jobs. No money moves.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping("/{bookingId}/confirmations/customer")
     public ResponseEntity<ApiResponse<BookingResponse>> confirmCustomer(@PathVariable("bookingId") Long bookingId, Principal caller) {
         BookingResponse result = service.confirmCustomer(bookingId, caller);
@@ -106,6 +146,16 @@ public class BookingController {
      * @param caller framework-supplied authenticated principal; never taken from the request body
      * @return HTTP 200 with the current booking state
      */
+    @Operation(summary = "Confirm provider completion",
+            description = "Assigned provider only. Either confirmation order is supported; both reach ConfirmedUnpaid. Repeats preserve current state/link, including paid jobs. No money moves.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping("/{bookingId}/confirmations/service-provider")
     public ResponseEntity<ApiResponse<BookingResponse>> confirmServiceProvider(@PathVariable("bookingId") Long bookingId, Principal caller) {
         BookingResponse result = service.confirmServiceProvider(bookingId, caller);
@@ -114,14 +164,25 @@ public class BookingController {
     }
 
     /**
-     * Routes booking payment to the Phase 6 service.
+     * Routes explicit payment to the atomic booking service.
      *
      * <p>Preconditions: Request syntax is valid and the security filter has authenticated an active user.
-     * <p>Postconditions: The skeleton service throws without changing state.
+     * <p>Postconditions: Wallets, ledger and booking commit together; successful repeats return the original result.
      * @param bookingId resource identifier
      * @param caller framework-supplied authenticated principal; never taken from the request body
-     * @return the planned response when implemented; currently HTTP 501 via the exception handler
+     * @return HTTP 200 with the paid booking and its transfer ID
      */
+    @Operation(summary = "Pay a completed booking",
+            description = "Active customer only, after both confirmations. Uses stored parties/price and atomically commits wallets, ledger and paid link. Failure stays unpaid without partial effects; successful retries return original payment, including concurrent requests. Body values cannot substitute financial fields.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", ref = "#/components/responses/Forbidden"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping("/{bookingId}/payment")
     public ResponseEntity<ApiResponse<BookingResponse>> pay(@PathVariable("bookingId") Long bookingId, Principal caller) {
         BookingResponse result = service.pay(bookingId, caller);

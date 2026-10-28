@@ -58,6 +58,7 @@ class PhaseThreeServiceTest {
         ReflectionTestUtils.setField(account, "id", 10L);
         when(users.findByUsername("owner")).thenReturn(Optional.of(user));
         when(accounts.findByUser_Username("owner")).thenReturn(Optional.of(account));
+        when(accounts.findByUser_Id(1L)).thenReturn(Optional.of(account));
         when(users.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
         when(accounts.saveAndFlush(any(Account.class))).thenAnswer(call -> {
             Account saved = call.getArgument(0);
@@ -77,7 +78,7 @@ class PhaseThreeServiceTest {
             case DEACTIVATE -> { assertThat(user.isActive()).isFalse(); verify(users).saveAndFlush(user); }
             case HEROES -> verify(accounts).findByUser_IsSuperheroTrueAndUser_ActiveTrueOrderByUser_UsernameAsc();
             case ACCOUNT_CREATE -> verify(accounts).saveAndFlush(argThat(value -> value.getUser() == user && value.getBalance().signum() == 0));
-            case ACCOUNT_GET -> verify(accounts).findByUser_Username("owner");
+            case ACCOUNT_GET -> verify(accounts).findByUser_Id(1L);
             case LOAD -> { assertThat(account.getBalance()).isEqualByComparingTo("25.00"); verify(entities).refresh(account, LockModeType.PESSIMISTIC_WRITE); }
         }
     }
@@ -199,6 +200,7 @@ class PhaseThreeServiceTest {
     @Test
     void accountlessUserCanDeactivate() {
         when(accounts.findByUser_Username("owner")).thenReturn(Optional.empty());
+        when(accounts.findByUser_Id(1L)).thenReturn(Optional.empty());
         profiles.deactivateMe(caller);
         assertThat(user.isActive()).isFalse();
     }
@@ -215,6 +217,7 @@ class PhaseThreeServiceTest {
     @Test
     void missingWalletFailsReadAndLoad() {
         when(accounts.findByUser_Username("owner")).thenReturn(Optional.empty());
+        when(accounts.findByUser_Id(1L)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> wallets.getMe(caller));
         assertThrows(ResourceNotFoundException.class, () -> wallets.load(new LoadAccountRequest(BigDecimal.ONE), caller));
         verify(accounts, never()).saveAndFlush(any());
@@ -245,6 +248,13 @@ class PhaseThreeServiceTest {
         assertThrows(InvalidRequestException.class, () -> wallets.load(null, caller));
     }
 
+    /** Preconditions: name-based wallet lookup could select a reused username. Postconditions: stable owner ID selects wallet. */
+    @Test
+    void walletReadUsesStableOwnerId() {
+        when(accounts.findByUser_Username("owner")).thenThrow(new AssertionError("Mutable username lookup"));
+        assertThat(wallets.getMe(caller).id()).isEqualTo(10L);
+        verify(accounts).findByUser_Id(1L);
+    }
     /** Preconditions: no supplied state required. Postconditions: complete valid replacement fixture returned.
      * @return editable profile fields */
     private UpdateUserRequest update() {

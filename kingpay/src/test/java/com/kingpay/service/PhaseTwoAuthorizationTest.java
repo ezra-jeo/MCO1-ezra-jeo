@@ -6,7 +6,7 @@ import com.kingpay.entity.Booking;
 import com.kingpay.entity.User;
 import com.kingpay.exception.InvalidRequestException;
 import com.kingpay.exception.ResourceNotFoundException;
-import com.kingpay.exception.UnimplementedOperationException;
+import com.kingpay.exception.BusinessConflictException;
 import com.kingpay.repository.AccountRepository;
 import com.kingpay.repository.BookingRepository;
 import com.kingpay.security.OwnershipGuard;
@@ -41,7 +41,7 @@ class PhaseTwoAuthorizationTest {
     private final TransferRecordRepository ledger = mock(TransferRecordRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
     private final TransferService transfers = new TransferService(accounts, ledger, new CurrentUser(users, entities), entities);
-    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities);
+    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities, transfers);
 
     /** Preconditions: mocks initialized. Postconditions: trusted test principals resolve persisted synthetic IDs. */
     @BeforeEach
@@ -59,7 +59,7 @@ class PhaseTwoAuthorizationTest {
         when(bookings.saveAndFlush(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
-    /** Preconditions: real owner/assigned actor calls. Postconditions: transfer/history succeed or booking guard reaches placeholder.
+    /** Preconditions: real owner/assigned actor calls. Postconditions: permitted actions succeed; unconfirmed payment conflicts.
      * @param action protected operation */
     @ParameterizedTest @EnumSource(Action.class)
     void allowedActorReachesPlaceholder(Action action) {
@@ -68,7 +68,7 @@ class PhaseTwoAuthorizationTest {
         if (action != Action.PAY) {
             assertDoesNotThrow(() -> invoke(action, 1L, () -> actor));
         } else {
-            assertThrows(UnimplementedOperationException.class, () -> invoke(action, 1L, () -> actor));
+            assertThrows(BusinessConflictException.class, () -> invoke(action, 1L, () -> actor));
         }
     }
 

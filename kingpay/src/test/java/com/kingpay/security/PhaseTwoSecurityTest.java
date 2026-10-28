@@ -182,13 +182,13 @@ class PhaseTwoSecurityTest {
                 .andExpect(status().isOk());
     }
 
-    /** Preconditions: assigned actor authenticates. Postconditions: implemented operations return 200; payment remains 501.
+    /** Preconditions: assigned actor authenticates. Postconditions: implemented operations return 200; unconfirmed payment returns 409.
      * @param action protected method
      * @throws Exception on HTTP failure */
     @ParameterizedTest @EnumSource(Action.class)
     void allowedActorsReachBusinessPlaceholder(Action action) throws Exception {
         call(action, false, action == Action.PROVIDER_CONFIRM ? provider : customer)
-                .andExpect(status().is(action == Action.PAY ? 501 : 200));
+                .andExpect(status().is(action == Action.PAY ? 409 : 200));
     }
 
     /** Preconditions: unrelated caller authenticates. Postconditions: 403 without executing future mutation.

@@ -9,7 +9,7 @@ import com.kingpay.entity.User;
 import com.kingpay.exception.BusinessConflictException;
 import com.kingpay.exception.InvalidRequestException;
 import com.kingpay.exception.ResourceNotFoundException;
-import com.kingpay.exception.UnimplementedOperationException;
+
 import com.kingpay.repository.AccountRepository;
 import com.kingpay.repository.BookingRepository;
 import com.kingpay.repository.UserRepository;
@@ -43,7 +43,7 @@ class BookingServiceTest {
     private final BookingRepository bookings = mock(BookingRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final EntityManager entities = mock(EntityManager.class);
-    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities);
+    private final BookingService service = new BookingService(accounts, bookings, new CurrentUser(users, entities), entities, mock(TransferService.class));
     private User customer;
     private User provider;
     private User outsider;
@@ -294,10 +294,10 @@ class BookingServiceTest {
         verifyNoInteractions(bookings);
     }
 
-    /** Preconditions: active customer owns booking. Postconditions: payment remains explicit 501 placeholder. */
+    /** Preconditions: active customer owns booking. Postconditions: payment before both confirmations is rejected. */
     @Test
-    void paymentRemainsPhaseSix() {
-        assertThrows(UnimplementedOperationException.class, () -> service.pay(30L, () -> "customer"));
+    void unconfirmedPaymentIsRejected() {
+        assertThrows(BusinessConflictException.class, () -> service.pay(30L, () -> "customer"));
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.Unconfirmed);
         noMoneyMovement();
     }

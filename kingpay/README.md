@@ -2,7 +2,7 @@
 
 Kingpay is a fictional superhero protection booking and wallet API. The planned flow creates a booking, collects both participants' completion confirmations, and lets the customer explicitly pay its fixed price. Wallets start at zero and can receive simulated loads. Standalone transfers have a separate permanent ledger.
 
-**Current state: Phase 5 implemented.** Registration/login, profiles, superhero selection, wallet loading, atomic standalone transfers, private history, booking creation and both-party confirmations work. Explicit booking payment remains Phase 6. See the [Phase 5 report](docs/phase-5-report.md) and [endpoint inventory](docs/skeleton-status.md).
+**Current state: Phases 6–7 complete.** The full booking-to-payment flow, standalone transfers, private history, authentication, profiles and wallet loading work. Verification, coverage, UML and documentation audits are complete. See the [Phases 6–7 report](docs/phase-6-7-report.md), [OpenAPI/admin addendum](docs/openapi-admin-report.md) and [endpoint inventory](docs/skeleton-status.md). Recording, repository-access checks and submission remain Phase 8.
 
 ## Prerequisites and dependency installation
 
@@ -16,7 +16,7 @@ Download dependencies and compile production and test sources:
 mvn -DskipTests test-compile
 ```
 
-The existing POM's Spring Boot version is retained. Bean Validation, MySQL Connector/J, Spring Security and its JWT resource-server components are included. Coverage tooling remains pending.
+The existing POM's Spring Boot version is retained. Bean Validation, MySQL Connector/J, Spring Security and its JWT resource-server components are included. JaCoCo generates coverage during Maven verification.
 
 ## MySQL configuration
 
@@ -35,6 +35,14 @@ Create `kingpay/.env` from `.env.example` if it does not already exist. Fill in 
 `application.properties` imports the working directory's `.env` using Spring Boot's native properties-file support. Run Maven from `kingpay/`. Values are unquoted Java properties values: backslashes must be escaped as `\\`, and quotes become part of the value. Credentials belong in their separate fields, not inside the JDBC URL. OS environment variables can also supply these keys. See [Spring Boot externalized configuration](https://docs.spring.io/spring-boot/reference/features/external-config.html#importing-extensionless-files).
 
 The default schema action is `validate`. A fresh empty database needs initial table creation before validation can pass; choose `update` only for the confirmed development schema. No database deletion, reset, or `create-drop` behavior is configured. Both `.env` and local `.env.*` variants are ignored by Git; `.env.example` contains no real credentials.
+
+For a fresh local setup, create a dedicated schema in MySQL Workbench or your MySQL client:
+
+```sql
+CREATE DATABASE kingpay CHARACTER SET utf8mb4;
+```
+
+Copy `.env.example` to `.env`, enter its database credentials, generate the signing key below, then build with `mvn -DskipTests package`. On this new schema, initialize once with `java -jar target/kingpay-0.0.1-SNAPSHOT.jar --spring.jpa.hibernate.ddl-auto=update`. Stop with Ctrl+C and restart normally with `java -jar target/kingpay-0.0.1-SNAPSHOT.jar`; startup now validates the existing tables. Keep `.env` at `DB_DDL_AUTO=validate`. Tests and API demonstration commands below use this normal configuration.
 
 After copying `.env.example`, generate its signing key locally without printing it:
 
@@ -65,9 +73,20 @@ The script compiles with cached Maven dependencies and checks the entity, DTO, e
 mvn test
 ```
 
-The full suite passes **482 tests** with zero failures/errors/skips, including 149 Phase 5 booking cases. The [Phase 5 report](docs/phase-5-report.md) records lifecycle, HTTP/security and committed concurrency evidence. The [Phase 4 report](docs/phase-4-report.md) records standalone-transfer SQL rollback evidence. See also [MySQL setup evidence](docs/mysql-setup.md).
+The full suite passes **550 tests** with zero failures/errors/skips. This includes real MySQL rollback and committed concurrency evidence for transfers and booking payments. See the [Phases 6–7 report](docs/phase-6-7-report.md) and [initial MySQL setup evidence](docs/mysql-setup.md).
 
-Registration, [Phase 2](docs/test-cases/phase-2.md), [Phase 3](docs/test-cases/phase-3.md), [Phase 4](docs/test-cases/phase-4.md) and [Phase 5](docs/test-cases/phase-5.md) have documented executable cases, with at least three per affected service/controller method. Payment business cases remain Phase 6; no coverage report is claimed.
+Registration and [Phases 2–7](docs/test-cases/phase-7.md) have documented executable cases. The [method inventory](docs/method-cases.tsv) maps every declared service/controller method, including private/static helpers, to at least three distinct cases.
+
+## Coverage and documentation verification
+
+```powershell
+mvn clean verify
+.\scripts\verify-documentation.ps1
+```
+
+Open `target/site/jacoco/index.html` for coverage and `target/apidocs/index.html` for generated Javadoc. HTML, XML and CSV coverage are generated by the pinned [JaCoCo Maven plugin](https://www.jacoco.org/jacoco/trunk/doc/maven.html). First use downloads dependencies; later runs can use `mvn -o clean verify` once cached. No coverage threshold or exclusions are configured. Observed coverage: 620/661 production lines (93.80%); service/controller lines are 100%, and booking/transfer service branches are 100%. These percentages describe this run, not a rubric requirement or proof of correctness.
+
+The documentation script parses Java source with the JDK, checks method contracts and all 56 service/controller case mappings against passing Surefire results, validates every native UML reference and all 53 source types' declared fields/signatures, and generates Javadoc with malformed-documentation warnings treated as errors. Run `scripts/update-uml.ps1` after changing signatures, then rerun verification. See the [UML source map](docs/uml-source-map.md). Generated `target/` reports are ignored by Git and regenerated locally.
 
 The isolated account entity suite can run before datasource setup:
 
@@ -207,6 +226,36 @@ if ($customerBefore -ne $customerAfter -or $heroBefore -ne $heroAfter) { throw '
 
 Creation returns 201 with `Unconfirmed`; the first confirmation above returns `ServiceProviderConfirmed`, and the second returns `ConfirmedUnpaid`. Customer-first also works through `CustomerConfirmed`. Each participant can confirm only their assigned side. Repeats return 200 with the current state, including historical paid bookings; they never transfer funds or reset payment links. Reads are private to either participant, and lists include both roles ordered by creation time then ID descending.
 
-The authenticated identity selects the customer. Only provider account ID and exact positive price are accepted inputs. Zero funds are allowed at booking time; active provider eligibility and distinct wallet owners are required. Invalid prices/self-booking return 400, missing wallets/bookings 404, unrelated/wrong-side actions 403, and unavailable providers 409. Customer/provider/price cannot be replaced later. There are no generic booking edit/delete routes or cancellation flow. Repeating creation creates another independent booking. `/payment` remains an authorized-customer 501 placeholder until Phase 6.
+The authenticated identity selects the customer. Only provider account ID and exact positive price are accepted inputs. Zero funds are allowed at booking time; active provider eligibility and distinct wallet owners are required. Invalid prices/self-booking return 400, missing wallets/bookings 404, unrelated/wrong-side actions 403, and unavailable providers 409. Customer/provider/price cannot be replaced later. There are no generic booking edit/delete routes or cancellation flow. Repeating creation creates another independent booking.
+
+After both confirmations, the customer explicitly pays:
+
+```powershell
+Invoke-RestMethod ($bookingUrl + '/payment') -Method Post -Headers $authHeaders
+```
+
+Payment returns 200 with `ConfirmedPaid` and `paymentTransferId`. Its fixed-price debit, provider credit, ledger row and booking link commit together. Premature payment or insufficient funds returns 409; another actor receives 403. A failed payment stays unpaid without partial financial effects. Load the exact missing amount through the simulated load endpoint and retry. Repeating a successful payment returns its original result without charging again, including simultaneous requests. Body fields cannot replace the stored source, recipient, quote or link. A matching standalone transfer does not mark the booking paid.
+
+## Repeatable endpoint and error demonstration
+
+With the packaged app running normally on port 8080:
+
+```powershell
+.\scripts\verify-api.ps1 -BaseUrl http://localhost:8080
+```
+
+This script executes **65 asserted curl requests** covering every endpoint path and relevant 400/401/403/404/405/409 responses, both transfer directions, confirmation/payment, safe retry, deactivation and retained history. It generates unique synthetic users and simulated funds on every run; use a dedicated local development schema. Request credentials stay in temporary files that are removed; `target/api-verification.json` contains safe case/status metadata. It leaves its provider and financial history rows intact. Normal registrations already have wallets, so `POST /accounts` demonstrates 409; its accountless 201 case is verified by the documented MySQL/controller fixture.
+
+Fresh-schema initialization followed by a normal `validate` restart passed this sequence twice in a separate verification database. Existing `kingpay` demo balances were not reset. Use the same sequence during the Phase 8 narrated recording, then show `mvn clean verify` and the coverage report. OpenAPI and the read-only admin overview are now implemented; see the addendum below.
 
 The example changes the recipient's balance. Demo preparation does not undo transfers or reduce balances above its targets. The acceptance tests use isolated 1000.00/500.00 fixtures and verify 900.00/600.00 after a 100.00 transfer without changing the prepared demo wallets.
+
+## OpenAPI / Swagger UI and admin overview
+
+After starting the application, open `/swagger-ui/index.html`. The task-started server currently uses [port 8091](http://localhost:8091/swagger-ui/index.html); normal startup defaults to port 8080. JSON is at `/v3/api-docs` and YAML at `/v3/api-docs.yaml`. Importable snapshots are [openapi.json](docs/openapi.json) and [openapi.yaml](docs/openapi.yaml). All 18 operations are documented with DTO schemas, validation, status codes and workflow rules.
+
+Register/login remain public. Documentation GET routes are also public; all business routes require a current active bearer identity. Log in, copy `data.token`, click **Authorize** in Swagger, and paste just the token. It is not persisted across refreshes. Use the documentation server's actual port for requests.
+
+`GET /api/v1/admin/overview` returns global `users`, `accounts`, `bookings` and `transfers` in the standard envelope. It includes inactive/historical records and contact/balance details but excludes passwords/hashes/tokens. It is read-only, unpaginated and limited to the stable user IDs in `KINGPAY_ADMIN_USER_IDS`. Empty configuration denies all users; no registration/profile/query field grants access. Add the trusted IDs as comma-separated unquoted values in `.env`, then restart.
+
+The requested identity is `kingpay-admin`, user ID **6678**; its generated credentials are in ignored `.env.admin`, and its wallet starts at zero. Set `KINGPAY_ADMIN_USER_IDS=6678` yourself as requested. The running server continues to deny its overview request until restarted with that configuration. See the [delegate report](docs/openapi-admin-report.md) for process/run details and verification. Keep `.env.admin` out of source control and recordings.

@@ -1,15 +1,17 @@
 package com.kingpay.service;
 
 import com.kingpay.dto.request.CreateBookingRequest;
+import com.kingpay.dto.request.TransferRequest;
 import com.kingpay.dto.response.BookingResponse;
+import com.kingpay.dto.response.TransferResponse;
 import com.kingpay.entity.Account;
 import com.kingpay.entity.Booking;
 import com.kingpay.entity.BookingStatus;
 import com.kingpay.entity.User;
+import com.kingpay.entity.TransferRecord;
 import com.kingpay.exception.BusinessConflictException;
 import com.kingpay.exception.InvalidRequestException;
 import com.kingpay.exception.ResourceNotFoundException;
-import com.kingpay.exception.UnimplementedOperationException;
 import com.kingpay.repository.AccountRepository;
 import com.kingpay.repository.BookingRepository;
 import com.kingpay.security.CurrentUser;
@@ -27,7 +29,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
-/** Fixed-price booking creation, private participant reads and idempotent completion; no money movement. */
+/** Fixed-price bookings, private completion and atomic customer-authorized payment. */
 @Service
 @Validated
 @Transactional(readOnly = true)
@@ -38,17 +40,21 @@ public class BookingService {
     private final BookingRepository bookings;
     private final CurrentUser identities;
     private final EntityManager entities;
+    private final TransferService transfers;
 
     /** Preconditions: Spring supplies persistence/security. Postconditions: no queries or writes.
      * @param accounts wallet/party lookup
      * @param bookings booking persistence
      * @param identities active caller resolver
-     * @param entities ordered locking context */
-    public BookingService(AccountRepository accounts, BookingRepository bookings, CurrentUser identities, EntityManager entities) {
+     * @param entities ordered locking context
+     * @param transfers transactional wallet/ledger writer */
+    public BookingService(AccountRepository accounts, BookingRepository bookings, CurrentUser identities, EntityManager entities,
+            TransferService transfers) {
         this.accounts = accounts;
         this.bookings = bookings;
         this.identities = identities;
         this.entities = entities;
+        this.transfers = transfers;
     }
 
     /** Preconditions: active customer wallet, distinct active eligible provider wallet and positive exact price.
@@ -117,15 +123,33 @@ public class BookingService {
         return confirm(bookingId, caller, false);
     }
 
-    /** Preconditions: active customer owns booking. Postconditions: Phase 6 placeholder changes nothing.
+    /** Preconditions: active customer owns booking; first payment requires both confirmations and sufficient funds.
+     * Postconditions: debit, credit, ledger and paid association commit together; any failure rolls them all back.
+     * Successful repeats return the original paid result without another transfer.
      * @param bookingId requested booking ID
      * @param caller framework principal
-     * @return future payment result; currently always throws after authorization
-     * @throws UnimplementedOperationException until Phase 6 implements payment */
+     * @return paid booking and its original successful transfer ID
+     * @throws BusinessConflictException if both confirmations are not yet present
+     * @throws com.kingpay.exception.InsufficientBalanceException if current funds do not cover the price */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse pay(Long bookingId, Principal caller) {
         User actor = identities.active(caller);
-        requireRole(booking(bookingId), actor, true);
-        throw new UnimplementedOperationException("Booking payment");
+        Booking booking = booking(bookingId);
+        requireRole(booking, actor, true);
+        // All owners precede the booking lock; the joined transfer then locks wallets in ascending ID order.
+        lockOwners(booking.getCustomer(), booking.getServiceProvider());
+        entities.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
+        requireActive(booking.getCustomer().getUser());
+        if (booking.getStatus() == BookingStatus.ConfirmedPaid) {
+            return response(booking);
+        }
+        if (booking.getStatus() != BookingStatus.ConfirmedUnpaid) {
+            throw new BusinessConflictException("Both participants must confirm before payment.");
+        }
+        TransferResponse transfer = transfers.transferMoney(new TransferRequest(booking.getCustomer().getId(),
+                booking.getServiceProvider().getId(), booking.getAmount()), caller);
+        booking.markPaid(entities.getReference(TransferRecord.class, transfer.id()));
+        return response(bookings.saveAndFlush(booking));
     }
 
     /** Preconditions: caller authenticated. Postconditions: authorized transition serializes with other booking writers.

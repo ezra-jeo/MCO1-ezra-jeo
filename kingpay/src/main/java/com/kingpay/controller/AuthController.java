@@ -1,5 +1,7 @@
 package com.kingpay.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import com.kingpay.dto.request.LoginRequest;
 import com.kingpay.dto.request.RegisterRequest;
 import com.kingpay.dto.response.ApiResponse;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Public registration and login routes; resource access uses bearer authentication. */
+@SecurityRequirements
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -41,6 +44,14 @@ public class AuthController {
      * @param request validated request body
      * @return HTTP 201 and the registered user's response fields
      */
+    @Operation(summary = "Register a user",
+            description = "Atomically creates a user and a zero-balance wallet. Passwords are limited to 72 UTF-8 bytes. Public operation.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody RegisterRequest request) {
         UserResponse result = service.register(request);
@@ -56,6 +67,14 @@ public class AuthController {
      * @param request validated request body
      * @return HTTP 200 and bearer token metadata
      */
+    @Operation(summary = "Log in",
+            description = "Returns a short-lived bearer token for an active identity. Public operation; no refresh/logout endpoint.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", ref = "#/components/responses/InvalidRequest"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", ref = "#/components/responses/Unauthenticated"),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", ref = "#/components/responses/ServerError")
+            })
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse result = service.login(request);
