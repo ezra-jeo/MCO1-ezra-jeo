@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * MySQL query verification; each test's inserts are rolled back by Spring Test.
- * Documented cases are in docs/test-cases/repositories.md.
+ * Documented cases are in test-cases/repositories.md.
  */
 @SpringBootTest
 @Transactional

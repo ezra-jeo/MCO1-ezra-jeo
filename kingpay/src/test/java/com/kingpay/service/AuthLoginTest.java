@@ -27,7 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** Isolated login service cases documented in docs/test-cases/phase-2.md. */
+/** Isolated login service cases documented in test-cases/phase-2.md. */
 @ExtendWith(MockitoExtension.class)
 class AuthLoginTest {
     private static final LoginRequest REQUEST = new LoginRequest("login-user", "test-password-123");

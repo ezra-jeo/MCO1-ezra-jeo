@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Isolated debit/credit tests; cases are documented in docs/test-cases/account.md.
+ * Isolated debit/credit tests; cases are documented in test-cases/account.md.
  * No Spring context or database is required.
  */
 class AccountTest {

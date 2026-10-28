@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Isolated booking behavior; case inputs and outcomes are in docs/test-cases/booking.md.
+ * Isolated booking behavior; case inputs and outcomes are in test-cases/booking.md.
  * Reflection supplies database-style account IDs without changing production entities.
  */
 class BookingTest {

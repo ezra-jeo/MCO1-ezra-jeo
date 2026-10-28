@@ -1,50 +1,46 @@
 # Kingpay
 
-Kingpay is a fictional superhero protection booking and wallet API. A hero publishes one flat rate; a customer submits a protection request at that price. Provider acceptance creates the booking. Both participants later confirm completion before the customer explicitly pays its preserved price. Wallets start at zero and can receive simulated loads. Standalone transfers have a separate permanent ledger.
+Kingpay is a Spring Boot API for superhero protection bookings and wallet payments. A hero publishes one flat rate; a customer submits a protection request at that price. Provider acceptance creates a booking. Both participants confirm completed work before the customer explicitly pays its preserved price.
 
-**Current state: Phases 2-7 and R1 implemented and verified.** R1 adds published flat rates and private accept/decline requests. See the [R1 report](docs/r1-report.md), [R1 acceptance cases](docs/test-cases/r1.md), [endpoint inventory](docs/skeleton-status.md) and root `plan.md`. Earlier phase reports are historical checkpoints. Recording, repository access and submission remain Phase 8; the professor's standout-feature decision remains open.
+The API also provides registration/login, editable profiles, zero-balance wallets, simulated wallet loads, account-to-account transfers, private histories and a read-only admin overview. Money uses exact `BigDecimal`/DECIMAL(19,2) values in one implicit project currency.
 
-## Prerequisites and dependency installation
+## Requirements and repository contents
 
-- JDK 21 and Maven 3.9 or later on `PATH`.
-- Run commands from `kingpay/`, where `pom.xml` lives.
-- A running MySQL server, a project database, and a MySQL user with access to it are needed for application startup. Enter local credentials in the ignored `.env` file described below.
+- JDK 21, Maven 3.9 or later, and a running MySQL server.
+- Run the commands below from `kingpay/`, where `pom.xml` lives.
+- Keep `src/main`, `src/test`, `pom.xml`, `.env.example`, the Maven wrapper files and [documented test cases](test-cases/README.md) in the submission.
+- Include the [UML class diagram](../Kingpay.drawio) at repository root, alongside the `kingpay/` project directory.
+- Include the narrated demonstration or its accessible link before submission.
+- Real `.env` files, credentials and generated `target/` artifacts are not submission files.
 
-Download dependencies and compile production and test sources:
+## Configure MySQL and authentication
 
-```powershell
-mvn -DskipTests test-compile
-```
-
-The existing POM's Spring Boot version is retained. Bean Validation, MySQL Connector/J, Spring Security and its JWT resource-server components are included. JaCoCo generates coverage during Maven verification.
-
-## MySQL configuration
-
-Create `kingpay/.env` from `.env.example` if it does not already exist. Fill in these values locally:
-
-| Variable | Meaning |
-| --- | --- |
-| `DB_URL` | JDBC URL such as `jdbc:mysql://localhost:3306/kingpay`; database must already exist |
-| `DB_USERNAME` | MySQL user with access to the project database |
-| `DB_PASSWORD` | That user's password; keep it in `.env` |
-| `DB_DDL_AUTO` | `validate` checks existing tables; `update` creates/updates mapped tables only in a confirmed dedicated development database |
-| `JWT_SECRET` | Base64-encoded cryptographically random signing key, at least 32 bytes before encoding; never commit or log it |
-| `JWT_ISSUER` | Expected token issuer; defaults to `kingpay` |
-| `JWT_TTL_SECONDS` | Positive access-token lifetime; defaults to `3600` |
-
-`application.properties` imports the working directory's `.env` using Spring Boot's native properties-file support. Run Maven from `kingpay/`. Values are unquoted Java properties values: backslashes must be escaped as `\\`, and quotes become part of the value. Credentials belong in their separate fields, not inside the JDBC URL. OS environment variables can also supply these keys. See [Spring Boot externalized configuration](https://docs.spring.io/spring-boot/reference/features/external-config.html#importing-extensionless-files).
-
-The default schema action is `validate`. A fresh empty database needs initial table creation before validation can pass; choose `update` only for the confirmed development schema. No database deletion, reset, or `create-drop` behavior is configured. Both `.env` and local `.env.*` variants are ignored by Git; `.env.example` contains no real credentials.
-
-For a fresh local setup, create a dedicated schema in MySQL Workbench or your MySQL client:
+Create a dedicated development database through MySQL Workbench or your MySQL client:
 
 ```sql
 CREATE DATABASE kingpay CHARACTER SET utf8mb4;
 ```
 
-Copy `.env.example` to `.env`, enter its database credentials, generate the signing key below, then build with `mvn -DskipTests package`. On this new schema, initialize once with `java -jar target/kingpay-0.0.1-SNAPSHOT.jar --spring.jpa.hibernate.ddl-auto=update`. Stop with Ctrl+C and restart normally with `java -jar target/kingpay-0.0.1-SNAPSHOT.jar`; startup now validates the existing tables. Keep `.env` at `DB_DDL_AUTO=validate`. Tests and API demonstration commands below use this normal configuration.
+Copy the environment template if `.env` does not already exist:
 
-After copying `.env.example`, generate its signing key locally without printing it:
+```powershell
+Copy-Item .env.example .env
+```
+
+Enter the connection values locally. Spring imports the working directory's `.env` as a Java properties file; values are unquoted, and literal backslashes must be escaped. Credentials go in their separate fields rather than in the JDBC URL. OS environment variables can also supply these settings.
+
+| Variable | Meaning |
+| --- | --- |
+| `DB_URL` | JDBC URL, for example `jdbc:mysql://localhost:3306/kingpay`; the database must exist |
+| `DB_USERNAME` | MySQL user with access to that development database |
+| `DB_PASSWORD` | That user's password |
+| `DB_DDL_AUTO` | Normally `validate`; one-time `update` initialization is described below |
+| `JWT_SECRET` | Base64-encoded random signing key, at least 32 bytes before encoding |
+| `JWT_ISSUER` | Expected issuer; defaults to `kingpay` |
+| `JWT_TTL_SECONDS` | Positive token lifetime; defaults to `3600` |
+| `KINGPAY_ADMIN_USER_IDS` | Comma-separated trusted user IDs; empty configuration denies admin access |
+
+After copying the template, generate its signing key locally without printing it:
 
 ```powershell
 $jwtBytes = New-Object byte[] 32
@@ -57,226 +53,165 @@ $jwtEnvText = $jwtEnvText.Replace('JWT_SECRET=REPLACE_WITH_BASE64_RANDOM_KEY',
 [IO.File]::WriteAllText($jwtEnvPath, $jwtEnvText)
 ```
 
-This replaces only the example placeholder and leaves an existing configured key intact. Invalid/missing keys prevent startup. Replacing the configured key invalidates existing tokens.
+This replaces only the example placeholder. Invalid/missing keys prevent startup, and changing an existing signing key invalidates previously issued tokens. `.env` and local `.env.*` variants are ignored; `.env.example` contains placeholders.
 
+## Build and initialize a fresh database
 
-## Existing-database R1 migration
-
-For an existing four-table database, use the additive migration before starting the new build with `validate`. Run from `kingpay/`; the explicit catalog must match `DB_URL`:
-
-```powershell
-$mysqlDriver = Get-ChildItem "$env:USERPROFILE/.m2/repository/com/mysql/mysql-connector-j" -Recurse -Filter '*.jar' |
-  Sort-Object FullName -Descending | Select-Object -First 1
-java --class-path $mysqlDriver.FullName scripts/MigrateRates.java apply kingpay
-java --class-path $mysqlDriver.FullName scripts/MigrateRates.java verify kingpay
-```
-
-The launcher reads external credentials privately and creates only `hero_rates`, `protection_requests` and the nullable unique booking-origin association. It fingerprints original values before/after, does not rewrite rows or opening balances, and supports retry after partial DDL. Pause concurrent writes while comparing fingerprints. It is deliberately scoped to this schema revision, rather than a general migration framework. Existing bookings keep null origins and remain completable/payable. Rollback to the previous application retains the expanded schema and new history; do not drop the new tables/column. See [migration evidence](docs/evidence/r1-migration-before.txt) and the [report](docs/r1-report.md).
-
-## Verify the skeleton
+Download dependencies and package the application:
 
 ```powershell
-.\scripts\verify-skeleton.ps1
+mvn -DskipTests package
 ```
 
-The script compiles with cached Maven dependencies and checks the entity, DTO, endpoint, and explicit-placeholder structure. It fails immediately when an assertion or compilation fails. This is a phase-specific scaffold check; update its placeholder expectations when implementing the corresponding phase.
-
-`-DskipTests test-compile` compiles test sources; it does **not** execute tests. The original `KingpayApplicationTests.contextLoads()` verifies startup against MySQL. Running the full suite requires a valid `.env` and a reachable database with the expected schema:
+For the new empty development schema only, initialize the mapped tables once:
 
 ```powershell
-mvn test
+java -jar target/kingpay-0.0.1-SNAPSHOT.jar --spring.jpa.hibernate.ddl-auto=update
 ```
 
-The full suite passes **674 tests** with zero failures/errors/skips. This includes real MySQL rollback and committed concurrency evidence for transfers and booking payments. See the [Phases 6–7 report](docs/phase-6-7-report.md) and [initial MySQL setup evidence](docs/mysql-setup.md).
-
-Registration and [Phases 2–7](docs/test-cases/phase-7.md) have documented executable cases. The [method inventory](docs/method-cases.tsv) maps every declared service/controller method, including private/static helpers, to at least three distinct cases.
-
-## Coverage and documentation verification
-
-```powershell
-mvn clean verify
-.\scripts\verify-documentation.ps1
-```
-
-Open `target/site/jacoco/index.html` for coverage and `target/apidocs/index.html` for generated Javadoc. HTML, XML and CSV coverage are generated by the pinned [JaCoCo Maven plugin](https://www.jacoco.org/jacoco/trunk/doc/maven.html). First use downloads dependencies; later runs can use `mvn -o clean verify` once cached. No coverage threshold or exclusions are configured. Observed coverage: 743/786 production lines (94.53%); service/controller lines are 100% (428/428). Service branches are 185/188 (98.40%); These percentages describe this run, not a rubric requirement or proof of correctness.
-
-The documentation script parses Java source with the JDK, checks method contracts and all 76 service/controller case mappings against passing Surefire results, validates every native UML reference and all 65 source types' declared fields/signatures, and generates Javadoc with malformed-documentation warnings treated as errors. Run `scripts/update-uml.ps1` after changing signatures, then rerun verification. See the [UML source map](docs/uml-source-map.md). Generated `target/` reports are ignored by Git and regenerated locally.
-
-The isolated account entity suite can run before datasource setup:
-
-```powershell
-mvn -Dtest=AccountTest test
-```
-
-Its [13 documented cases](docs/test-cases/account.md) cover debit/credit success, boundary amounts, rejected inputs, and unchanged balances after failure. These entity cases supplement the course requirement; every service/controller method still needs at least three documented unique cases.
-
-The booking suite adds [22 documented cases](docs/test-cases/booking.md) for confirmation ordering/idempotency and payment eligibility, matching, and duplicate rejection. Run both suites in PowerShell:
-
-```powershell
-mvn '-Dtest=AccountTest,BookingTest' test
-```
-
-The booking fixtures simulate persisted account IDs without starting a database. Accessor-only classes do not receive tests that merely repeat their getters.
-
-The [repository query inventory and 21 MySQL cases](docs/test-cases/repositories.md) cover identity/ownership lookups, superhero browsing, transfer history, booking access, and outstanding work. Once all production sources compile, run them against the configured database:
-
-```powershell
-mvn -Dtest=RepositoryQueriesTest test
-```
-
-Repository test inserts are transactional and rolled back. All 21 repository cases have passed against MySQL. Registration persistence tests separately verify completed service transactions and remove only their uniquely named fixture records afterward.
-
-Registration uses a named unique index, `uk_users_username`, to distinguish username conflicts from other integrity failures. The existing development index was renamed without changing data or uniqueness. Forward/reverse SQL and compatibility notes are in the [registration case inventory](docs/test-cases/registration.md). `PasswordEncoder` now uses BCrypt cost 12 and verifies existing jBCrypt hashes. Registration accepts 8–72 characters, additionally limited to 72 UTF-8 bytes; multibyte characters can reach the byte limit sooner.
-
-## Run the application
-
-The startup command is:
+After successful startup, stop the process with Ctrl+C. Keep `.env` at `DB_DDL_AUTO=validate` and start normally:
 
 ```powershell
 mvn spring-boot:run
 ```
 
-MySQL connectivity, schema validation and executable startup were verified against `kingpay`. Normal starts use `DB_DDL_AUTO=validate`; the six mapped tables exist after the R1 migration. The current working database has already been migrated without changing original rows.
+Alternatively, run the packaged application normally:
+
+```powershell
+java -jar target/kingpay-0.0.1-SNAPSHOT.jar
+```
+
+The default port is **8080**. For another port, add `--server.port=8091` to the jar command. Run one instance per chosen port.
+
+Normal startup validates the six mapped tables without changing the schema. These initialization steps assume a fresh database; an existing database must already match the current model. No automatic versioned data-migration process is configured. Stop a running packaged instance before rebuilding its jar, particularly on Windows where it can remain locked.
+
+## Swagger and OpenAPI
+
+Documentation is served by the application itself:
+
+- [Swagger UI](http://localhost:8080/swagger-ui/index.html)
+- [OpenAPI JSON](http://localhost:8080/v3/api-docs)
+- [OpenAPI YAML](http://localhost:8080/v3/api-docs.yaml)
+
+Use the application's actual port. All 24 operations have generated request/response schemas and workflow descriptions. Register or log in, copy `data.token`, click **Authorize**, and paste the token. Switch tokens when switching actors. Authorization is not persisted across browser refreshes.
+
+Registration/login and documentation GET routes are public. Business endpoints require a current active bearer identity. JWT subjects use stable user IDs; each request reloads current activity/name/authorities. Passwords are BCrypt hashes. There is no refresh-token or logout endpoint.
 
 ## Minimal API example
 
-Register a test identity (use a new username if it already exists):
+Create a test customer using credentials entered locally:
 
 ```powershell
-'{"username":"example-customer","password":"demo-password-123","fullName":"Demo Customer","phone":"000","email":"demo@example.test","isSuperhero":false}' |
-  curl.exe -i -X POST http://localhost:8080/api/v1/auth/register -H "Content-Type: application/json" --data-binary '@-'
+$baseUrl = 'http://localhost:8080'
+$credential = Get-Credential -Message 'Enter a new Kingpay test username and password'
+$registration = @{
+    username = $credential.UserName
+    password = $credential.GetNetworkCredential().Password
+    fullName = 'Example Customer'
+    phone = '000'
+    email = 'customer@example.test'
+    isSuperhero = $false
+} | ConvertTo-Json
+$registered = Invoke-RestMethod "$baseUrl/api/v1/auth/register" -Method Post `
+    -ContentType 'application/json' -Body $registration
+$loginBody = @{
+    username = $credential.UserName
+    password = $credential.GetNetworkCredential().Password
+} | ConvertTo-Json
+$login = Invoke-RestMethod "$baseUrl/api/v1/auth/login" -Method Post `
+    -ContentType 'application/json' -Body $loginBody
+$headers = @{ Authorization = 'Bearer ' + $login.data.token }
+Invoke-RestMethod "$baseUrl/api/v1/users/me" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/v1/accounts/me" -Headers $headers
+Invoke-RestMethod "$baseUrl/api/v1/accounts/me/load" -Method Post `
+    -Headers $headers -ContentType 'application/json' -Body '{"amount":1000.00}'
 ```
 
-Login and use its bearer token with PowerShell:
+Registration returns 201 with the public user fields and atomically creates a zero wallet. Login returns 200 with a bearer token; the owner wallet read returns its balance. Use a new username for a fresh registration; duplicate usernames return 409. Passwords must contain 8-72 characters and fit BCrypt's 72-byte UTF-8 limit.
+
+The load example adds 1000.00. Each successful load is a separate simulated credit; repeating it adds again. Loading has no external payment provider or transfer-ledger entry.
+
+## Protection and payment workflow
+
+Use a second identity with `isSuperhero=true` as the provider. The same user may also hire another hero.
+
+1. **Provider publishes:** `PUT /api/v1/users/me/rate` with `{"amount":100.00}`.
+2. **Customer browses:** `GET /api/v1/users/superheroes`, then `GET /api/v1/users/{userId}/rate`. Select the hero by user ID; transfer endpoints instead use account IDs.
+3. **Customer submits:** `POST /api/v1/protection-requests` with `serviceProviderUserId` and the displayed `expectedAmount`. The server resolves both wallets and snapshots its authoritative rate. A stale displayed price returns 409; successful creation returns 201 Pending with no booking.
+4. **Provider responds:** `POST /api/v1/protection-requests/{requestId}/accept` creates exactly one Unconfirmed booking at the preserved price. Repeated acceptance returns that booking. `/decline` creates none; repeat decline is harmless, and opposite terminal decisions return 409.
+5. **Both confirm completed work:** each participant invokes their own booking confirmation endpoint. Either order is allowed: Unconfirmed becomes CustomerConfirmed or ServiceProviderConfirmed, then ConfirmedUnpaid. Repeats cannot reverse completion/payment.
+6. **Customer pays:** `POST /api/v1/bookings/{bookingId}/payment`. The fixed-price debit, provider credit, transfer record and paid booking link commit together. The result is ConfirmedPaid with `paymentTransferId`; successful retries return the original result without charging again.
+
+Requests, acceptance and completion confirmations move no money. Zero funds are allowed until payment. Insufficient funds leave the booking unpaid and retryable; load the missing funds and retry. Published-price changes affect new requests only. A matching standalone transfer does not mark a booking paid. Direct `POST /bookings` returns 405.
+
+## Endpoint inventory
+
+Responses use the `message`/`data` envelope, except successful deactivation returns 204 without a body. Request schemas and detailed errors are available in Swagger.
+
+| Method and path | Purpose / success |
+| --- | --- |
+| `POST /api/v1/auth/register` | Register user and zero wallet; 201 |
+| `POST /api/v1/auth/login` | Issue bearer token; 200 |
+| `GET /api/v1/users/me` | Own profile; 200 |
+| `PUT /api/v1/users/me` | Replace editable profile fields; 200 |
+| `DELETE /api/v1/users/me` | Guarded user deactivation; 204 |
+| `GET /api/v1/users/superheroes` | Available heroes with published prices; 200 |
+| `PUT /api/v1/users/me/rate` | Publish/update own flat rate; 200 |
+| `GET /api/v1/users/{userId}/rate` | Read available hero rate by user ID; 200 |
+| `POST /api/v1/accounts` | Create own zero wallet for an accountless user; 201 |
+| `GET /api/v1/accounts/me` | Own wallet; 200 |
+| `POST /api/v1/accounts/me/load` | Add an exact positive simulated load; 200 |
+| `POST /api/v1/transfers` | Transfer `{fromId, toId, amount}` as source owner; 200 |
+| `GET /api/v1/transfers/history/{accountId}` | Owner-only incoming/outgoing history; 200 |
+| `POST /api/v1/protection-requests` | Submit a server-priced Pending request; 201 |
+| `GET /api/v1/protection-requests` | Own submissions/provider inbox; 200 |
+| `GET /api/v1/protection-requests/{requestId}` | Participant-only request details; 200 |
+| `POST /api/v1/protection-requests/{requestId}/accept` | Assigned provider accepts; 200 booking |
+| `POST /api/v1/protection-requests/{requestId}/decline` | Assigned provider declines; 200 request |
+| `GET /api/v1/bookings` | Own bookings in either role; 200 |
+| `GET /api/v1/bookings/{bookingId}` | Participant-only booking; 200 |
+| `POST /api/v1/bookings/{bookingId}/confirmations/customer` | Customer confirms completion; 200 |
+| `POST /api/v1/bookings/{bookingId}/confirmations/service-provider` | Provider confirms completion; 200 |
+| `POST /api/v1/bookings/{bookingId}/payment` | Customer explicitly pays fixed price; 200 |
+| `GET /api/v1/admin/overview` | Configured admin reads all six collections; 200 |
+
+Registration already creates a wallet, so a normal user's separate account-creation request returns 409. Its 201 path supports accountless existing identities and is covered by a controlled test fixture.
+
+## Ownership, history and errors
+
+- Only owners read their profiles/wallets or spend from their accounts. Only assigned participants read a protection request/booking, and only the assigned provider responds to a protection request.
+- Profile PUT replaces username, fullName, phone, email and isSuperhero. Credentials, activity, wallet ownership and balances cannot be replaced through that body. Unknown JSON fields are ignored.
+- User deactivation requires zero balance and no unfinished/unpaid booking in either role. It freezes only User and retains related records. Pending requests do not block otherwise valid deactivation; new acceptance rechecks availability. Outstanding provider bookings block removal of hero eligibility.
+- Money inputs must be positive and fit 17 integer/two fractional digits; balances may reach zero. No rounding or currency conversion is performed. Self-transfers and self-protection requests are rejected.
+- Standalone transfers atomically debit/credit and append a successful transfer record. Successful repeats are independent transfers. Histories include both directions, newest timestamp then ID descending.
+- Bookings keep fixed parties/price. Transfer history has no edit/delete API. Cancellation, request expiry, refunds, bidding and pagination are outside this version.
+
+Errors use 400 for invalid fields/IDs/JSON, 401 for absent/invalid/inactive authentication, 403 for wrong actors, 404 for absent resources, and 409 for domain conflicts such as stale prices, insufficient funds or duplicate usernames. Unexpected server errors return a safe 500 without internal diagnostics. Failed transactional writes leave no partial financial effects.
+
+## Admin configuration
+
+The admin overview returns `users`, `accounts`, `bookings`, `transfers`, `rates` and `protectionRequests`, including historical/inactive records. It excludes passwords/hashes/tokens and is read-only and unpaginated.
+
+Register the intended identity normally, take its returned user ID, add that ID to `KINGPAY_ADMIN_USER_IDS` in the local `.env`, and restart. Multiple IDs are comma-separated. Neither registration nor profile fields grant admin access; empty configuration denies everyone. Credentials remain local.
+
+## Tests and coverage
+
+Configure MySQL and initialize the current schema before running the complete suite:
 
 ```powershell
-$loginBody = @{ username = 'example-customer'; password = 'demo-password-123' } | ConvertTo-Json
-$loginResponse = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post `
-  -ContentType 'application/json' -Body $loginBody
-$authHeaders = @{ Authorization = 'Bearer ' + $loginResponse.data.token }
-Invoke-WebRequest http://localhost:8080/api/v1/accounts/me -Headers $authHeaders
+mvn clean verify
 ```
 
-Registration returns 201, login returns 200, and the authenticated account lookup returns 200 with its zero balance. Omitting the bearer returns 401. A typical authentication failure is:
+Maven runs JUnit/Mockito/MockMvc and MySQL-backed tests, builds the executable jar, and generates JaCoCo HTML at `target/site/jacoco/index.html`. Surefire results are in `target/surefire-reports/`. The database tests create and clean up their own captured fixtures; use a dedicated development database. No coverage exclusions or threshold are configured.
 
-```json
-{"message":"Authentication required or invalid.","data":null}
-```
+The latest verified full run passed **674 tests in 26 classes**, with zero failures/errors/skips. Observed production line coverage was **743/786 (94.53%)**, including **428/428 service/controller lines**. These figures describe that run rather than guarantee all possible behavior.
 
-The authenticated principal supplies caller identity. Tokens use a stable user ID, validated issuer/expiry and HS256 signature; every bearer request reloads current user name, active state and roles. Inactive users cannot log in or use existing tokens. There is no refresh-token or logout endpoint. Wrong credentials receive a generic 401; cross-owner actions receive 403; validation errors use the same `message`/`data` envelope with safe field descriptions.
+The [case matrices and method inventory](test-cases/README.md) document at least three distinct cases for each of the 76 service/controller declarations, including private helpers. Keep both this documentation and the executable tests in the submission. Production methods include Javadoc contracts in their source.
 
-Load the authenticated owner's wallet with an exact positive amount:
+To run only the database-independent entity suites:
 
 ```powershell
-Invoke-RestMethod http://localhost:8080/api/v1/accounts/me/load -Method Post `
-  -Headers $authHeaders -ContentType 'application/json' -Body '{"amount":1000.00}'
+mvn '-Dtest=AccountTest,BookingTest' test
 ```
 
-Each successful request adds that amount; retrying a successful request adds it again. This is simulated project funding with no external payment provider or transfer-ledger row. Amounts must fit 17 integer and 2 fractional digits; resulting balances must also fit. No rounding or currency conversion occurs; one implicit project currency is used.
-
-Profile routes are `GET/PUT/DELETE /api/v1/users/me`. PUT fully replaces username, fullName, phone, email and isSuperhero; server-owned fields cannot be changed through that body. Unknown JSON fields are ignored. DELETE freezes the user only when the wallet is zero and no outstanding booking exists in either role; it retains wallet, booking and ledger records. State conflicts return 409. Inactive users' tokens are rejected with 401.
-
-`GET /api/v1/users/superheroes` returns active eligible heroes with a published rate. Each summary includes the hero user `id`, `accountId`, `rateId` and `amount`. Protection requests select the hero by user ID. Contact details and balances are omitted. Removing provider eligibility while assigned work is unfinished/unpaid returns 409.
-
-Registration already creates a wallet. `POST /api/v1/accounts` creates a zero wallet for an accountless user and returns 409 for an existing wallet; it accepts no opening-balance input.
-
-## Prepare repeatable demo participants
-
-With the application running, execute:
-
-```powershell
-.\scripts\prepare-demo.ps1
-```
-
-The script prepares `demo-customer` at **1000.00** and `demo-superhero` at **250.00**, and publishes the hero's flat rate at **100.00**, using real API calls. Missing credentials are generated into ignored `kingpay/.env.demo`; the script prints only usernames, wallet IDs and balances. You can supply `KINGPAY_DEMO_PASSWORD` instead. Read your local secret file privately when preparing Postman; keep passwords/tokens out of screenshots and source control.
-
-Sequential reruns load only the difference to the target. A balance above target, an inactive identity, incompatible eligibility, an existing different rate or an existing different password fails without resetting the account. Run the script sequentially. It targets localhost by default; `-BaseUrl` selects a different local server port.
-
-## Standalone transfer and private history
-
-After authenticating and loading the example user's wallet above, prepare the demo users so a recipient is available. Use its public provider account ID; the caller supplies no identity credentials in the transfer body:
-
-```powershell
-$sourceWallet = Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders
-$heroList = Invoke-RestMethod http://localhost:8080/api/v1/users/superheroes -Headers $authHeaders
-$recipientAccountId = $heroList.data | Where-Object { $_.username -eq 'demo-superhero' } |
-  Select-Object -First 1 -ExpandProperty accountId
-if (-not $recipientAccountId) { throw 'Run scripts/prepare-demo.ps1 first.' }
-$transferBody = @{ fromId = $sourceWallet.data.id; toId = $recipientAccountId; amount = [decimal]100.00 } | ConvertTo-Json
-Invoke-RestMethod http://localhost:8080/api/v1/transfers -Method Post -Headers $authHeaders `
-  -ContentType 'application/json' -Body $transferBody
-Invoke-RestMethod ('http://localhost:8080/api/v1/transfers/history/' + $sourceWallet.data.id) -Headers $authHeaders
-```
-
-A successful transfer returns 200 with ID, source/destination IDs, exact amount and timestamp. Both balance updates and one ledger insertion commit together. History is private to its account owner and includes incoming/outgoing successful transfers, newest first; no results returns an empty array.
-
-Self-transfers and invalid amounts return 400; missing accounts 404; wrong source/history owner 403; insufficient funds, inactive recipients and capacity conflicts 409. Missing/invalid bearer authentication returns 401. No ledger edit/delete endpoint exists. Repeated successful requests are separate transfers, and standalone transfers do not mark bookings paid.
-
-## Booking and two-party completion
-
-Continue with the customer `$authHeaders` and `$recipientAccountId` from above. Log in as the selected demo superhero using its local `.env.demo` password, then create a fixed-price job and confirm each side:
-
-```powershell
-$heroCredential = Get-Credential -UserName 'demo-superhero' -Message 'Use the local demo password'
-$heroLoginBody = @{ username = $heroCredential.UserName; password = $heroCredential.GetNetworkCredential().Password } | ConvertTo-Json
-$heroLogin = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post `
-  -ContentType 'application/json' -Body $heroLoginBody
-$heroHeaders = @{ Authorization = 'Bearer ' + $heroLogin.data.token }
-$customerBefore = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders).data.balance
-$heroBefore = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $heroHeaders).data.balance
-$heroUserId = (Invoke-RestMethod http://localhost:8080/api/v1/users/me -Headers $heroHeaders).data.id
-Invoke-RestMethod http://localhost:8080/api/v1/users/me/rate -Method Put `
-  -Headers $heroHeaders -ContentType 'application/json' -Body '{"amount":100.00}'
-$currentRate = Invoke-RestMethod ("http://localhost:8080/api/v1/users/$heroUserId/rate") -Headers $authHeaders
-$requestBody = @{ serviceProviderUserId = $heroUserId; expectedAmount = $currentRate.data.amount } | ConvertTo-Json
-$proposal = Invoke-RestMethod http://localhost:8080/api/v1/protection-requests -Method Post `
-  -Headers $authHeaders -ContentType 'application/json' -Body $requestBody
-$requestUrl = 'http://localhost:8080/api/v1/protection-requests/' + $proposal.data.id
-# Provider can POST $requestUrl/decline instead; that creates no booking.
-$createdBooking = Invoke-RestMethod ($requestUrl + '/accept') -Method Post -Headers $heroHeaders
-$bookingUrl = 'http://localhost:8080/api/v1/bookings/' + $createdBooking.data.id
-Invoke-RestMethod ($bookingUrl + '/confirmations/service-provider') -Method Post -Headers $heroHeaders
-Invoke-RestMethod ($bookingUrl + '/confirmations/customer') -Method Post -Headers $authHeaders
-Invoke-RestMethod $bookingUrl -Headers $authHeaders
-Invoke-RestMethod http://localhost:8080/api/v1/bookings -Headers $authHeaders
-$customerAfter = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $authHeaders).data.balance
-$heroAfter = (Invoke-RestMethod http://localhost:8080/api/v1/accounts/me -Headers $heroHeaders).data.balance
-if ($customerBefore -ne $customerAfter -or $heroBefore -ne $heroAfter) { throw 'Unexpected booking balance change.' }
-[pscustomobject]@{ CustomerBefore = $customerBefore; CustomerAfter = $customerAfter; HeroBefore = $heroBefore; HeroAfter = $heroAfter }
-```
-
-Request creation returns 201 with `Pending` and no booking; provider acceptance returns 200 with an `Unconfirmed` booking; the first confirmation above returns `ServiceProviderConfirmed`, and the second returns `ConfirmedUnpaid`. Customer-first also works through `CustomerConfirmed`. Each participant can confirm only their assigned side. Repeats return 200 with the current state, including historical paid bookings; they never transfer funds or reset payment links. Reads are private to either participant, and lists include both roles ordered by creation time then ID descending.
-
-The authenticated identity selects the customer. Request inputs are `serviceProviderUserId` and `expectedAmount`; the latter detects stale displays, while the server stores the authoritative rate. A mismatch returns 409. Existing request/booking snapshots never change when the hero publishes a new rate. Zero funds are allowed at submission/acceptance. New acceptance requires both users active and the provider eligible. Requests are private to participants; only the assigned provider accepts/declines. Those decisions are terminal and retry-safe; repeated customer submissions are independent requests. Direct `POST /bookings` returns 405. Pending requests do not prevent otherwise valid deactivation/eligibility removal; acceptance rechecks availability. There are no generic edit/delete, cancellation or expiry routes.
-
-After both confirmations, the customer explicitly pays:
-
-```powershell
-Invoke-RestMethod ($bookingUrl + '/payment') -Method Post -Headers $authHeaders
-```
-
-Payment returns 200 with `ConfirmedPaid` and `paymentTransferId`. Its fixed-price debit, provider credit, ledger row and booking link commit together. Premature payment or insufficient funds returns 409; another actor receives 403. A failed payment stays unpaid without partial financial effects. Load the exact missing amount through the simulated load endpoint and retry. Repeating a successful payment returns its original result without charging again, including simultaneous requests. Body fields cannot replace the stored source, recipient, quote or link. A matching standalone transfer does not mark the booking paid.
-
-## Repeatable endpoint and error demonstration
-
-With the packaged app running normally on port 8080:
-
-```powershell
-.\scripts\verify-api.ps1 -BaseUrl http://localhost:8080
-```
-
-This script executes **86 asserted curl requests** covering every endpoint path and relevant 400/401/403/404/405/409 responses, both transfer directions, publish/lookup, stale-price rejection, request/accept/decline, confirmation/payment, safe retries, deactivation and retained history. It generates unique synthetic users and simulated funds on every run; use a dedicated local development schema. Request credentials stay in temporary files that are removed; `target/api-verification.json` contains safe case/status metadata. It leaves its provider and financial history rows intact. Normal registrations already have wallets, so `POST /accounts` demonstrates 409; its accountless 201 case is verified by the documented MySQL/controller fixture.
-
-The R1 sequence passed on a fresh separate verification schema, then again after restarting it with `validate`. Existing `kingpay` demo balances were not reset. Use the same sequence during the Phase 8 narrated recording, then show `mvn clean verify` and the coverage report. OpenAPI and the read-only admin overview are now implemented; see the addendum below.
-
-The example changes the recipient's balance. Demo preparation does not undo transfers or reduce balances above its targets. The acceptance tests use isolated 1000.00/500.00 fixtures and verify 900.00/600.00 after a 100.00 transfer without changing the prepared demo wallets.
-
-## OpenAPI / Swagger UI and admin overview
-
-After starting the application, open `/swagger-ui/index.html`. The task-started server currently uses [port 8091](http://localhost:8091/swagger-ui/index.html); normal startup defaults to port 8080. JSON is at `/v3/api-docs` and YAML at `/v3/api-docs.yaml`. Importable snapshots are [openapi.json](docs/openapi.json) and [openapi.yaml](docs/openapi.yaml). All 24 operations are documented with DTO schemas, validation, status codes and workflow rules.
-
-Register/login remain public. Documentation GET routes are also public; all business routes require a current active bearer identity. Log in, copy `data.token`, click **Authorize** in Swagger, and paste just the token. It is not persisted across refreshes. Use the documentation server's actual port for requests.
-
-`GET /api/v1/admin/overview` returns global `users`, `accounts`, `bookings`, `transfers`, `rates` and `protectionRequests` in the standard envelope. It includes inactive/historical records and contact/balance details but excludes passwords/hashes/tokens. It is read-only, unpaginated and limited to the stable user IDs in `KINGPAY_ADMIN_USER_IDS`. Empty configuration denies all users; no registration/profile/query field grants access. Add the trusted IDs as comma-separated unquoted values in `.env`, then restart.
-
-The requested identity is `kingpay-admin`, user ID **6678**; its generated credentials are in ignored `.env.admin`, and its wallet starts at zero. Set `KINGPAY_ADMIN_USER_IDS=6678` yourself as requested. An empty allowlist continues to deny access; restart after configuring trusted IDs. See the [delegate report](docs/openapi-admin-report.md) for process/run details and verification. Keep `.env.admin` out of source control and recordings.
+For the recorded demonstration, use Postman or curl to show intended successes and error messages, run the tests, display coverage, and explain the pricing/request/booking/payment boundaries with voice narration.
