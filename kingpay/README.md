@@ -4,6 +4,58 @@ Kingpay is a Spring Boot API for superhero protection bookings and wallet paymen
 
 The API also provides registration/login, editable profiles, zero-balance wallets, simulated wallet loads, account-to-account transfers, private histories and a read-only admin overview. Money uses exact `BigDecimal`/DECIMAL(19,2) values in one implicit project currency.
 
+## Relationship to course lectures and laboratory activities
+
+The mapping below follows the MCO1 specifications' Week 1-6 technical scope and the Week 5 wallet/security laboratory. Account-to-account transfer is also included as the common feature required by the subsequent class clarification. These are the foundation, rather than the additional feature claimed for this capstone.
+
+| Course topic / activity | Specific Kingpay implementation | Source evidence |
+| --- | --- | --- |
+| Weeks 1-2: Spring Boot, IoC and dependency injection | Maven Spring Boot monolith; controllers receive application services through constructors, and services receive persistence/security dependencies | [pom.xml](pom.xml), [AuthController](src/main/java/com/kingpay/controller/AuthController.java), [AuthService](src/main/java/com/kingpay/service/AuthService.java) |
+| Weeks 1-2: REST routing and DTOs | Resource routes under `/api/v1`, explicit HTTP methods/statuses, request records and response DTOs instead of entity serialization | [UserController](src/main/java/com/kingpay/controller/UserController.java), [request DTOs](src/main/java/com/kingpay/dto/request), [response DTOs](src/main/java/com/kingpay/dto/response) |
+| Week 3: JPA/Hibernate and MySQL persistence | Mapped entities, relationship constraints, JpaRepository interfaces and derived queries; database settings loaded through application.properties | [entities](src/main/java/com/kingpay/entity), [repositories](src/main/java/com/kingpay/repository), [application.properties](src/main/resources/application.properties); reference [1] |
+| Week 3: domain data operations | Register/create identities and wallets; read/update own profile; guarded user deactivation; owner wallet lookup and explicit loading/transfer commands | [UserService](src/main/java/com/kingpay/service/UserService.java), [AccountService](src/main/java/com/kingpay/service/AccountService.java) |
+| Week 4: Bean Validation and centralized exception handling | Required fields, email/length/decimal validation; RestControllerAdvice and ExceptionHandler methods produce consistent safe error envelopes | [RegisterRequest](src/main/java/com/kingpay/dto/request/RegisterRequest.java), [LoadAccountRequest](src/main/java/com/kingpay/dto/request/LoadAccountRequest.java), [SkeletonExceptionHandler](src/main/java/com/kingpay/exception/SkeletonExceptionHandler.java) |
+| Week 5: registration, login and password security | Atomic user/zero-wallet registration, BCrypt PasswordEncoder, AuthenticationManager credential verification and signed expiring JWT issuance | [AuthService](src/main/java/com/kingpay/service/AuthService.java), [TokenService](src/main/java/com/kingpay/service/TokenService.java) |
+| Week 5: secured resources and ownership | Stateless SecurityFilterChain, UserDetailsService adapter, JWT validation, current database identity/activity checks, and owner/participant authorization | [SecurityConfig](src/main/java/com/kingpay/security/SecurityConfig.java), [KingpayUserDetailsService](src/main/java/com/kingpay/security/KingpayUserDetailsService.java), [CurrentUser](src/main/java/com/kingpay/security/CurrentUser.java); reference [2] |
+| Common transfer requirement | Authorized source-wallet debit, recipient credit and permanent successful transfer record in one transaction; owner-only incoming/outgoing history | [TransferService](src/main/java/com/kingpay/service/TransferService.java), [TransferRecord](src/main/java/com/kingpay/entity/TransferRecord.java) |
+| Week 6: JUnit, Mockito and controller/integration testing | Isolated service tests, MockMvc HTTP tests and MySQL-backed checks of committed success, rollback and selected concurrency cases | [executable tests](src/test/java/com/kingpay), [documented case matrices](test-cases/README.md) |
+| Documentation and demonstration requirements | Source Javadoc contracts, class diagram, documented cases and a Postman demonstration; JaCoCo generates coverage for the test demonstration | [class diagram](../Kingpay.drawio), [case inventory](test-cases/method-cases.tsv), [coverage setup](pom.xml); reference [3] |
+
+The Week 5 scaffold's security goals are retained with implementation differences: framework JWT support replaces a handwritten filter, and a UserDetailsService adapter maps the persistence entity to Spring's UserDetails contract. Admin overview authorization uses externally configured stable user IDs. The project does not claim an exact copy of every scaffold endpoint.
+
+Financial records use domain-specific commands and retained history: profile deletion means deactivation, and wallets/bookings/transfers do not expose unrestricted replacement/deletion operations. This documents the implemented policy rather than claiming generic CRUD for every entity.
+
+## Additional feature: superhero protection booking
+
+The selected addition beyond the wallet/security scaffold is the **protection booking lifecycle**. It applies course technologies to a new domain workflow; transactions, validation and JWT themselves are not claimed as new technologies outside the course.
+
+| Additional capability | Implemented behavior | Relevance and practical value |
+| --- | --- | --- |
+| Published hero pricing | One positive flat rate per provider; available hero discovery and rate lookup by user ID | Customers can review a concrete service price before requesting protection |
+| Price-preserving customer request | Authenticated customer submits a provider and expected price; server checks the current publication and saves immutable terms | Rejects stale displays and prevents later rate edits from silently changing an existing agreement |
+| Provider acceptance or decline | Only the assigned provider responds; acceptance and one linked booking commit together; repeated acceptance returns the original booking | Gives heroes control over engagements and prevents duplicate bookings caused by retries |
+| Independent completion confirmations | Each assigned participant confirms only their own side; either order reaches ConfirmedUnpaid | Separates accepting the job from agreeing that the protection work is complete |
+| Booking-linked settlement | Customer explicitly pays the stored full price after both confirmations; debit, credit, ledger and booking link commit together | Associates payment with the agreed service and prevents partial financial updates |
+| Duplicate-safe payment | A successful retry returns the same paid booking and transfer ID | Prevents repeated requests from charging for the same engagement twice |
+| Private lifecycle history | Participants can inspect their requests/bookings and payment association; unrelated users are denied | Makes progress and settlement traceable without exposing another customer's private activity |
+
+Implementation evidence: [HeroRateService](src/main/java/com/kingpay/service/HeroRateService.java), [ProtectionRequestService](src/main/java/com/kingpay/service/ProtectionRequestService.java), [BookingService](src/main/java/com/kingpay/service/BookingService.java), and [booking/request case matrices](test-cases/r1.md).
+
+This addition is specific to Kingpay's theme: a generic wallet can move funds, but it does not represent a protection engagement, preserve its agreed price, obtain provider agreement, track both completion confirmations or link a single settlement to that work. The booking lifecycle connects those responsibilities into an end-to-end service journey.
+
+Boundaries: one provider and one full payment per booking, simulated wallet funding and one implicit currency. Customers may defer unpaid settlement; installments, cancellation, refunds, expiry and scheduling are not implemented. Additional-feature grading remains subject to the instructor's assessment of relevance and practicality.
+
+## References and attribution
+
+Course basis: MCO1 project specifications, Section 4 (Weeks 1-6 technical scope); Week 5 laboratory instructions (wallet security, authentication and ownership); the MCO1 FAQ (documented service/controller cases, endpoint/error demonstration and coverage); and the class clarification requiring account-to-account transfers. These identify the instructional basis without requiring copies of course handouts in the submitted repository.
+
+Implementation references:
+
+1. [Spring Data JPA reference](https://docs.spring.io/spring-data/jpa/reference/jpa.html) - repository abstraction, entity persistence, queries and transaction/locking support.
+2. [Spring Security JWT resource-server reference](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html) - bearer-token authentication and JWT validation infrastructure used by the application. Kingpay issues its own tokens and uses a local configured HMAC key; it does not depend on an external authorization server.
+3. [JaCoCo Maven plugin](https://www.jacoco.org/jacoco/trunk/doc/maven.html) - test-agent integration and generated coverage reports.
+4. [springdoc-openapi documentation](https://springdoc.org/) - generated OpenAPI schemas and Swagger UI. This supplements API documentation; the recorded behavior demonstration can use Postman alone.
+
 ## Requirements and repository contents
 
 - JDK 21, Maven 3.9 or later, and a running MySQL server.
@@ -204,7 +256,17 @@ mvn clean verify
 
 Maven runs JUnit/Mockito/MockMvc and MySQL-backed tests, builds the executable jar, and generates JaCoCo HTML at `target/site/jacoco/index.html`. Surefire results are in `target/surefire-reports/`. The database tests create and clean up their own captured fixtures; use a dedicated development database. No coverage exclusions or threshold are configured.
 
-The latest verified full run passed **674 tests in 26 classes**, with zero failures/errors/skips. Observed production line coverage was **743/786 (94.53%)**, including **428/428 service/controller lines**. These figures describe that run rather than guarantee all possible behavior.
+To regenerate test coverage without cleaning or repackaging a running jar:
+
+```powershell
+mvn '-Djacoco.append=false' test jacoco:report
+```
+
+MySQL must be available; a separately running API server is not required. The flag replaces previous execution data so this report describes the new test run. Open `target/site/jacoco/index.html` in a browser, then click a package and class to inspect source coverage: green is covered, red is missed, and yellow is partly covered. JaCoCo records production instructions and branches executed by the tests. Manual Swagger calls are not collected by this test-agent setup. Coverage measures execution, not whether every assertion or business rule is correct; the first HTML `Cov.` column is instruction coverage, while line and branch counters are separate.
+
+The generated report is under ignored `target/` and can be regenerated for the video. It does not need to be committed with the source.
+
+The latest verified full run passed **674 tests in 26 classes**, with zero failures/errors/skips. Observed production line coverage was **768/811 (94.70%)**, including **431/431 service/controller lines**. Overall branch coverage was **253/282 (89.72%)**. These figures describe that run rather than guarantee all possible behavior.
 
 The [case matrices and method inventory](test-cases/README.md) document at least three distinct cases for each of the 76 service/controller declarations, including private helpers. Keep both this documentation and the executable tests in the submission. Production methods include Javadoc contracts in their source.
 
