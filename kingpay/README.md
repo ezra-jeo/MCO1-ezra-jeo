@@ -56,13 +56,17 @@ Implementation references:
 3. [JaCoCo Maven plugin](https://www.jacoco.org/jacoco/trunk/doc/maven.html) - test-agent integration and generated coverage reports.
 4. [springdoc-openapi documentation](https://springdoc.org/) - generated OpenAPI schemas and Swagger UI. This supplements API documentation; the recorded behavior demonstration can use Postman alone.
 
+## Recorded demonstration
+
+[Watch the Kingpay demonstration on Google Drive](https://drive.google.com/file/d/1VoY62DeFcxvjC0xK1LBvg3MNZHkjtQkc/view?usp=sharing).
+
 ## Requirements and repository contents
 
 - JDK 21, Maven 3.9 or later, and a running MySQL server.
 - Run the commands below from `kingpay/`, where `pom.xml` lives.
 - Keep `src/main`, `src/test`, `pom.xml`, `.env.example`, the Maven wrapper files and [documented test cases](test-cases/README.md) in the submission.
 - Include the [UML class diagram](../Kingpay.drawio) at repository root, alongside the `kingpay/` project directory.
-- Include the narrated demonstration or its accessible link before submission.
+- The recorded demonstration is linked above; ensure the instructor has permission to view it.
 - Real `.env` files, credentials and generated `target/` artifacts are not submission files.
 
 ## Configure MySQL and authentication
